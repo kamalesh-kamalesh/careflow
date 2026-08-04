@@ -1,0 +1,6 @@
+{
+  "name": "CareFlow AI",
+  "description": "Intelligent Healthcare Management platform with Patient, Doctor, and Caregiver portals, AI assistant, appointment booking, medication adherence tracking, and analytics.",
+  "requestFramePermissions": ["microphone"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
