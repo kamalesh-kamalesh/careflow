@@ -41,7 +41,7 @@ const MainAppContent: React.FC = () => {
         case 'medicines':
           return <Medicines />;
         case 'ai-assistant':
-          return <AICareAssistant />;
+          return <AICareAssistant setActiveTab={setActiveTab} />;
         default:
           return <PatientHome setActiveTab={setActiveTab} />;
       }
@@ -77,7 +77,7 @@ const MainAppContent: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[#F8F7F4] text-[#1A1A1A] font-sans selection:bg-[#BC544B] selection:text-white">
+    <div className="min-h-screen bg-slate-50 text-slate-900 font-sans selection:bg-teal-500 selection:text-white">
       <Nav activeTab={activeTab} setActiveTab={setActiveTab} />
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -87,8 +87,8 @@ const MainAppContent: React.FC = () => {
 
       {/* Global Toast Notification */}
       {toastMessage && (
-        <div className="fixed bottom-5 right-5 z-50 bg-[#1A1A1A] text-white px-5 py-3 border-2 border-[#1A1A1A] text-xs font-mono uppercase tracking-wider flex items-center space-x-3 shadow-lg">
-          <span className="w-2 h-2 bg-[#BC544B]"></span>
+        <div className="fixed bottom-5 right-5 z-50 bg-slate-900 text-white px-5 py-3 rounded-2xl text-xs font-semibold tracking-wide flex items-center space-x-3 shadow-xl border border-slate-800">
+          <span className="w-2 h-2 bg-teal-400 rounded-full animate-pulse"></span>
           <span>{toastMessage}</span>
         </div>
       )}

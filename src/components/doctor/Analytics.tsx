@@ -147,7 +147,7 @@ export const Analytics: React.FC = () => {
                   ))}
                 </Pie>
                 <Tooltip />
-                <Legend tick={{ fontSize: 11, fill: '#475569' }} />
+                <Legend wrapperStyle={{ fontSize: '11px', color: '#475569' }} />
               </PieChart>
             </ResponsiveContainer>
           </div>

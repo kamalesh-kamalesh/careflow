@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useAppContext } from '../../context/AppContext';
 import { MedicalDisclaimer } from '../common/MedicalDisclaimer';
+import { DoctorRecommendation } from '../common/DoctorRecommendation';
 import {
   Calendar,
   Pill,
@@ -372,6 +373,13 @@ export const PatientHome: React.FC<PatientHomeProps> = ({ setActiveTab }) => {
           </div>
         )}
       </div>
+
+      {/* Reusable Specialist Doctor Recommendations */}
+      <DoctorRecommendation
+        title="Top-Rated Specialist Doctors"
+        description="Book appointments with top regional doctors based on your health profile."
+        limit={3}
+      />
 
       {/* Connected Health Devices Placeholder */}
       <div className="bg-slate-900 text-white border border-slate-800 rounded-2xl p-6 shadow-xl relative overflow-hidden">

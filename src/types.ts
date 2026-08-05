@@ -32,6 +32,7 @@ export interface Doctor {
   id: string;
   name: string;
   specialty: string;
+  qualification?: string;
   hospital: string;
   availability: string;
   experience: string;
@@ -101,6 +102,28 @@ export interface HealthAlert {
   actionTaken?: string;
 }
 
+export interface ChatBookingData {
+  step: 'assessment' | 'doctor_list' | 'confirmation' | 'confirmed';
+  specialty?: string;
+  severity?: 'Mild' | 'Moderate' | 'Severe' | 'Urgent';
+  doctors?: {
+    doctor: Doctor;
+    hospitalName: string;
+    location: string;
+    distance: string;
+    fee: string;
+    rating: number;
+    availableSlots: string[];
+  }[];
+  pendingBooking?: {
+    doctor: Doctor;
+    hospitalName: string;
+    date: string;
+    time: string;
+  };
+  confirmedAppointment?: Appointment;
+}
+
 export interface ChatMessage {
   id: string;
   sender: 'user' | 'assistant';
@@ -108,6 +131,7 @@ export interface ChatMessage {
   timestamp: string;
   source?: string;
   disclaimer?: string;
+  bookingData?: ChatBookingData;
 }
 
 export interface ReportAnalysis {
@@ -117,6 +141,76 @@ export interface ReportAnalysis {
   recommendations: string[];
   abnormalValues?: string[];
   disclaimer?: string;
+}
+
+export interface Hospital {
+  id: string;
+  name: string;
+  keySpecialties: string[];
+  location: string;
+  phone?: string;
+  emergency24x7?: boolean;
+  rating?: number;
+}
+
+export interface Symptom {
+  id: string;
+  name: string;
+  onset?: string;
+  severity: 'mild' | 'moderate' | 'severe';
+  duration?: string;
+}
+
+export interface PossibleCondition {
+  name: string;
+  explanation: string;
+  probability: number; // e.g., 0.85
+}
+
+export interface SymptomAssessmentRequest {
+  patientId?: string;
+  age?: number;
+  gender?: string;
+  symptoms: Symptom[];
+  medicalHistory?: string[];
+}
+
+export interface DoctorRecommendationResponse {
+  hospitalId: string;
+  hospitalName: string;
+  doctorId: string;
+  doctorName: string;
+  specialization: string;
+  rating: number;
+  distance?: string;
+  availableSlots: string[];
+  reason: string;
+}
+
+export interface SymptomAssessmentResponse {
+  possibleConditions: PossibleCondition[];
+  riskLevel: 'Low' | 'Moderate' | 'High';
+  emergencyFlag: boolean;
+  aiSummary: string;
+  homeCare: string[];
+  recommendedDoctors?: DoctorRecommendationResponse[];
+  recommendedHospitals?: Hospital[];
+}
+
+export interface AppointmentRequest {
+  patientId: string;
+  hospitalId?: string;
+  doctorId: string;
+  date: string;
+  time: string;
+  reason?: string;
+  type?: string;
+}
+
+export interface AppointmentResponse {
+  appointmentId: string;
+  status: 'scheduled' | 'confirmed' | 'rejected';
+  message: string;
 }
 
 export interface CurrentUser {

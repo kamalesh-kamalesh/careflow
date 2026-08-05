@@ -85,7 +85,15 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   const [doctors, setDoctors] = useState<Doctor[]>(() => {
     const saved = localStorage.getItem('careflow_doctors');
-    return saved ? JSON.parse(saved) : seedDoctors;
+    if (!saved) return seedDoctors;
+    try {
+      const parsed: Doctor[] = JSON.parse(saved);
+      const existingIds = new Set(parsed.map(d => d.id));
+      const missing = seedDoctors.filter(d => !existingIds.has(d.id));
+      return missing.length > 0 ? [...parsed, ...missing] : parsed;
+    } catch {
+      return seedDoctors;
+    }
   });
 
   const [appointments, setAppointments] = useState<Appointment[]>(() => {
