@@ -25,9 +25,10 @@ import {
 interface NavProps {
   activeTab: string;
   setActiveTab: (tab: string) => void;
+  onLogout?: () => void;
 }
 
-export const Nav: React.FC<NavProps> = ({ activeTab, setActiveTab }) => {
+export const Nav: React.FC<NavProps> = ({ activeTab, setActiveTab, onLogout }) => {
   const {
     activeRole,
     switchRole,
@@ -292,7 +293,7 @@ export const Nav: React.FC<NavProps> = ({ activeTab, setActiveTab }) => {
                 <span>SOS</span>
               </button>
 
-              {/* Active User Avatar */}
+              {/* Active User Avatar & Logout */}
               <div className="flex items-center space-x-2 pl-2 border-l border-slate-200">
                 <div className="w-8 h-8 sm:w-9 sm:h-9 bg-slate-900 text-white rounded-full flex items-center justify-center font-bold text-xs shadow-xs">
                   {currentUser?.name.charAt(0)}
@@ -301,6 +302,18 @@ export const Nav: React.FC<NavProps> = ({ activeTab, setActiveTab }) => {
                   <p className="text-xs font-bold text-slate-900 leading-none">{currentUser?.name}</p>
                   <p className="text-[10px] font-medium text-slate-500 leading-tight uppercase mt-0.5">{currentUser?.title}</p>
                 </div>
+                {onLogout && (
+                  <button
+                    onClick={() => {
+                      onLogout();
+                      if (speak) speak('Logged out successfully');
+                    }}
+                    title="Sign Out / Change Account"
+                    className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all border border-transparent hover:border-rose-200 ml-1"
+                  >
+                    <LogOut className="w-4 h-4" />
+                  </button>
+                )}
               </div>
 
             </div>

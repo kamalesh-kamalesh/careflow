@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useAppContext } from '../../context/AppContext';
 import { Appointment } from '../../types';
+import { generatePatientSummaryPDF } from '../../utils/pdfGenerator';
 import {
   Calendar,
   Clock,
@@ -11,11 +12,12 @@ import {
   FileText,
   AlertCircle,
   ChevronRight,
-  Building2
+  Building2,
+  Download
 } from 'lucide-react';
 
 export const MyAppointments: React.FC = () => {
-  const { appointments, doctors, getActivePatient, updateAppointmentStatus, speak } = useAppContext();
+  const { appointments, medicines, doctors, getActivePatient, updateAppointmentStatus, speak } = useAppContext();
   const patient = getActivePatient();
   const [statusFilter, setStatusFilter] = useState<string>('all');
 
@@ -50,7 +52,22 @@ export const MyAppointments: React.FC = () => {
           <p className="text-xs text-slate-500 mt-0.5">Track upcoming appointments, wait times, & clinical consultation history.</p>
         </div>
 
-        <div className="flex items-center space-x-2 scrollbar-none overflow-x-auto">
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            onClick={() => {
+              generatePatientSummaryPDF(
+                patient,
+                patientAppointments,
+                medicines.filter(m => m.patientId === patient.id),
+                doctors
+              );
+              speak('Downloading appointment and medical summary PDF');
+            }}
+            className="px-3.5 py-1.5 rounded-xl text-xs font-bold bg-teal-600 hover:bg-teal-700 text-white shadow-xs transition-all flex items-center space-x-1.5"
+          >
+            <Download className="w-3.5 h-3.5" />
+            <span>Export Summary PDF</span>
+          </button>
           {['all', 'scheduled', 'completed', 'cancelled'].map(st => (
             <button
               key={st}

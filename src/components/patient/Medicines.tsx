@@ -1,6 +1,7 @@
 import React from 'react';
 import { useAppContext } from '../../context/AppContext';
 import { Medicine } from '../../types';
+import { generatePatientSummaryPDF } from '../../utils/pdfGenerator';
 import {
   Pill,
   CheckCircle2,
@@ -13,11 +14,12 @@ import {
   Sunset,
   Moon,
   HelpCircle,
-  TrendingUp
+  TrendingUp,
+  Download
 } from 'lucide-react';
 
 export const Medicines: React.FC = () => {
-  const { medicines, getActivePatient, toggleMedicationDose, refillRequest, speak } = useAppContext();
+  const { medicines, appointments, doctors, getActivePatient, toggleMedicationDose, refillRequest, speak } = useAppContext();
   const patient = getActivePatient();
 
   if (!patient) return null;
@@ -50,9 +52,26 @@ export const Medicines: React.FC = () => {
           </p>
         </div>
 
-        <div className="bg-slate-900 text-white border border-slate-800 rounded-xl px-4 py-2.5 text-center flex-shrink-0 shadow-xs">
-          <span className="text-[10px] uppercase font-semibold text-teal-400 block tracking-wider">Active Prescriptions</span>
-          <span className="text-xl font-extrabold">{patientMeds.length} MEDS</span>
+        <div className="flex items-center space-x-3 flex-shrink-0">
+          <button
+            onClick={() => {
+              generatePatientSummaryPDF(
+                patient,
+                appointments.filter(a => a.patientId === patient.id),
+                patientMeds,
+                doctors
+              );
+              speak('Downloading medication and appointment summary PDF');
+            }}
+            className="px-3.5 py-2.5 rounded-xl text-xs font-bold bg-teal-600 hover:bg-teal-700 text-white shadow-xs transition-all flex items-center space-x-1.5"
+          >
+            <Download className="w-4 h-4" />
+            <span>Export Summary PDF</span>
+          </button>
+          <div className="bg-slate-900 text-white border border-slate-800 rounded-xl px-4 py-2.5 text-center flex-shrink-0 shadow-xs">
+            <span className="text-[10px] uppercase font-semibold text-teal-400 block tracking-wider">Active Prescriptions</span>
+            <span className="text-xl font-extrabold">{patientMeds.length} MEDS</span>
+          </div>
         </div>
       </div>
 

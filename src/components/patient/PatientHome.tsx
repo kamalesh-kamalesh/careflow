@@ -14,6 +14,8 @@ import {
 import { useAppContext } from '../../context/AppContext';
 import { MedicalDisclaimer } from '../common/MedicalDisclaimer';
 import { DoctorRecommendation } from '../common/DoctorRecommendation';
+import { generatePatientSummaryPDF } from '../../utils/pdfGenerator';
+import { DailyWellnessInsights } from './DailyWellnessInsights';
 import {
   Calendar,
   Pill,
@@ -30,7 +32,9 @@ import {
   TrendingUp,
   User,
   ShieldAlert,
-  Edit3
+  Edit3,
+  Download,
+  FileText
 } from 'lucide-react';
 
 interface PatientHomeProps {
@@ -108,6 +112,21 @@ export const PatientHome: React.FC<PatientHomeProps> = ({ setActiveTab }) => {
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
+            <button
+              onClick={() => {
+                generatePatientSummaryPDF(
+                  patient,
+                  appointments.filter(a => a.patientId === patient.id),
+                  medicines.filter(m => m.patientId === patient.id),
+                  doctors
+                );
+                speak('Generating and downloading medical PDF summary report.');
+              }}
+              className="bg-teal-500/20 hover:bg-teal-500/30 text-teal-200 border border-teal-500/30 text-xs font-bold px-4 py-2.5 rounded-xl transition-all flex items-center space-x-2 shadow-sm"
+            >
+              <Download className="w-4 h-4 text-teal-400" />
+              <span>Download PDF Summary</span>
+            </button>
             <button
               onClick={() => {
                 setActiveTab('ai-assistant');
@@ -205,6 +224,14 @@ export const PatientHome: React.FC<PatientHomeProps> = ({ setActiveTab }) => {
           </div>
         </div>
       </div>
+
+      {/* Daily Wellness Insights Section */}
+      <DailyWellnessInsights
+        patient={patient}
+        medicines={userMeds}
+        setActiveTab={setActiveTab}
+        speak={speak}
+      />
 
       {/* Patient Recent Vitals Bar */}
       <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs">

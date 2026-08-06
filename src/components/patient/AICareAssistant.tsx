@@ -355,24 +355,24 @@ A reminder will be sent one hour before your appointment.`,
     setMessages(prev => [...prev, userMsg]);
     setLoadingChat(true);
 
-    const structuredPrompt = `STRUCTURED SYMPTOM ASSESSMENT:
+    const structuredPrompt = `STRUCTURED SYMPTOM ASSESSMENT DETAILS:
 Patient Age: ${patientAge} years
 Body Temperature: ${temperature}°${tempUnit} (${isFeverHigh ? 'High Fever' : isFeverMild ? 'Low-grade Fever' : 'Normal'})
 Symptom Description: ${symptomDetails}
 Duration: ${symptomDuration}
 Self-Reported Severity: ${symptomSeverity}
 
-Please analyze this structured health data and provide:
-1. Likely Causes (ranked with brief clinical explanations)
-2. Risk Level Analysis & Temperature Alert
-3. Recommended Medical Specialties (specify primary & secondary)
-4. Recommended Immediate Home Care
-5. Guidance on when to seek urgent medical care`;
+Since full symptom details have been provided above, please follow the clinical consultation protocol:
+1. Express empathy for what the patient is going through.
+2. Summarize what the patient has shared clearly.
+3. Provide possible explanations with confidence levels (e.g. Most likely ~75%, Secondary ~20%).
+4. Suggest safe self-care measures.
+5. Recommend consulting a healthcare professional ONLY IF red-flag symptoms are present, symptoms are severe or worsening, or persist beyond the expected duration.`;
 
     const { specialty, severity, doctors: matchedDocs } = getDoctorMatchForSymptoms(symptomDetails);
 
     try {
-      const response = await fetch('/api/chat', {
+      const response = await fetch('/api/ai/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -392,50 +392,36 @@ Please analyze this structured health data and provide:
       const botMsg: ChatMessage = {
         id: `msg_bot_${Date.now()}`,
         sender: 'assistant',
-        text: data.response || `Thank you. Based on your symptoms (${symptomDetails}), age (${patientAge}), and temperature (${temperature}°${tempUnit}), here is your clinical assessment report.`,
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        bookingData: {
-          step: 'doctor_list',
-          specialty,
-          severity,
-          doctors: matchedDocs
-        }
+        text: data.response || `Thank you. Based on your symptoms (${symptomDetails}), age (${patientAge}), and temperature (${temperature}°${tempUnit}), here is your clinical assessment.`,
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
       };
 
       setMessages(prev => [...prev, botMsg]);
-      speak(`Symptom analysis complete. Recommended specialty is ${specialty}. Please review available doctor slots below.`);
+      speak(botMsg.text.replace(/[*#_~`\-]/g, ' ').slice(0, 180));
     } catch (err) {
       console.error('Structured Assessment Error:', err);
+      const isUrgent = symptomSeverity === 'Severe' || symptomSeverity === 'Urgent' || isFeverHigh;
       const fallbackMsg: ChatMessage = {
         id: `msg_bot_fallback_${Date.now()}`,
         sender: 'assistant',
-        text: `### 📋 Symptom Assessment Results
+        text: `### 📋 Symptom Assessment Summary
 
-**Patient Profile:** ${patientAge} years old | Body Temp: **${temperature}°${tempUnit}** | Severity: **${symptomSeverity}**
+I'm sorry you're dealing with this discomfort. Let's review what you've shared:
 
-**1. 🔍 Likely Causes:**
-• **Acute Viral Syndrome / Infection** (Common with fever & systemic discomfort)
-• **Upper Respiratory / Inflammatory Response**
-• **Dehydration or Overexertion Effect**
+• **Summary:** ${patientAge} years old | Body Temp: **${temperature}°${tempUnit}** | Duration: **${symptomDuration}** | Severity: **${symptomSeverity}**
 
-**2. 🩺 Recommended Medical Specialty:**
-• **${specialty}** (Primary Specialist)
-• **General Medicine** (General Consultation)
+### 🔍 Possible Explanations
+• **Acute Viral / Inflammatory Response** (~70% confidence): Common with body temperature fluctuations and systemic discomfort.
+• **Functional Stress or Fatigue Strain** (~20% confidence): Related to physical strain, sleep deficits, or dehydration.
 
-**3. 🛡️ Recommended Home Care:**
-• Stay well-hydrated with water, electrolyte solutions, or warm soups.
-• Get plenty of restful sleep.
-• Monitor your temperature every 4 hours.
+### 🌿 Safe Self-Care Measures
+• Rest comfortably in a quiet, well-ventilated space.
+• Stay hydrated with warm fluids or electrolyte solutions.
+• Monitor your temperature and symptoms every 4 to 6 hours.
 
-**4. ⚠️ When to Seek Emergency Care:**
-• High fever exceeding 103°F (39.4°C), severe breathlessness, chest pain, or extreme lethargy.`,
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        bookingData: {
-          step: 'doctor_list',
-          specialty,
-          severity,
-          doctors: matchedDocs
-        }
+${isUrgent ? `\n### 🩺 Professional Medical Consultation
+Given that your reported severity is **${symptomSeverity}** ${isFeverHigh ? 'with high fever' : ''}, it is recommended to consult a healthcare professional (${specialty}) for evaluation.` : ''}`,
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
       };
       setMessages(prev => [...prev, fallbackMsg]);
     } finally {
@@ -470,33 +456,20 @@ Please analyze this structured health data and provide:
     }
 
     const lowerText = text.toLowerCase();
-    const isSymptomOrDoctorQuery =
-      lowerText.includes('headache') ||
-      lowerText.includes('fever') ||
-      lowerText.includes('pain') ||
-      lowerText.includes('doctor') ||
-      lowerText.includes('appointment') ||
-      lowerText.includes('book') ||
-      lowerText.includes('cardiologist') ||
-      lowerText.includes('neurologist') ||
-      lowerText.includes('stomach') ||
-      lowerText.includes('find') ||
-      lowerText.includes('hospital');
+    const isExplicitDoctorBookingRequest =
+      (lowerText.includes('book') && (lowerText.includes('appointment') || lowerText.includes('doctor') || lowerText.includes('slot'))) ||
+      (lowerText.includes('find') && (lowerText.includes('doctor') || lowerText.includes('specialist') || lowerText.includes('hospital')));
 
-    if (isSymptomOrDoctorQuery) {
+    if (isExplicitDoctorBookingRequest) {
       const { specialty, severity, doctors: matchedDocs } = getDoctorMatchForSymptoms(text);
 
       setTimeout(() => {
         const botMsg: ChatMessage = {
           id: `msg_bot_${Date.now()}`,
           sender: 'assistant',
-          text: `I'm sorry you're not feeling well.
+          text: `I can help you find specialists in Erode!
 
-Based on your symptoms, you may need to consult a **${specialty}**.
-
-**Severity:** ${severity === 'Urgent' ? '🔴 High Risk' : severity === 'Severe' ? '🟠 High' : '🟡 Moderate'}
-
-Searching nearby hospitals in Erode... Here are available specialists & time slots:`,
+Based on your request, here are top **${specialty}** specialists and available appointment slots:`,
           timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
           bookingData: {
             step: 'doctor_list',
@@ -507,7 +480,7 @@ Searching nearby hospitals in Erode... Here are available specialists & time slo
         };
 
         setMessages(prev => [...prev, botMsg]);
-        speak(`Based on your symptoms, I recommend a ${specialty}. Choose an available time slot below.`);
+        speak(`Here are available ${specialty} specialists in Erode. Choose a time slot below.`);
         setLoadingChat(false);
       }, 600);
       return;

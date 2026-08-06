@@ -82,7 +82,7 @@ createRoot(document.getElementById('root')!).render(
 );
 
 // Register service worker in production or unregister in dev to prevent cache conflicts
-if (import.meta.env.PROD) {
+if ((import.meta as any).env?.PROD) {
   registerServiceWorker(() => {
     console.log('[CareFlow AI] Service Worker active & ready for offline caching.');
   });

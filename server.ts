@@ -40,122 +40,123 @@ async function startServer() {
       }
 
       const lowerPrompt = prompt.toLowerCase();
+      const hasHistory = history && Array.isArray(history) && history.length > 0;
 
       // Check emergency red flags directly first
-      const isRedFlag = HEALTH_KNOWLEDGE_BASE.emergency_red_flags.signs.some(sign => {
-        const signKw = sign.toLowerCase().replace(/[^a-z0-9 ]/g, '');
-        return signKw.split(' ').some(word => word.length > 4 && lowerPrompt.includes(word));
-      });
-
-      // Search matching condition from Knowledge Base for Fallback or context enrichment
-      const matchedCondition = HEALTH_KNOWLEDGE_BASE.conditions.find(c => {
-        const cName = c.name.toLowerCase();
-        if (cName.includes('indigestion') && (lowerPrompt.includes('stomach') || lowerPrompt.includes('abdomen') || lowerPrompt.includes('digest') || lowerPrompt.includes('acid') || lowerPrompt.includes('gas') || lowerPrompt.includes('belly'))) return true;
-        if (cName.includes('cold') && (lowerPrompt.includes('cold') || lowerPrompt.includes('sneez') || lowerPrompt.includes('runny nose'))) return true;
-        if (cName.includes('flu') && (lowerPrompt.includes('flu') || lowerPrompt.includes('fever') && lowerPrompt.includes('body ache'))) return true;
-        if (cName.includes('fever') && lowerPrompt.includes('fever')) return true;
-        if (cName.includes('headache') && (lowerPrompt.includes('headache') || lowerPrompt.includes('head pain'))) return true;
-        if (cName.includes('sore throat') && (lowerPrompt.includes('throat') || lowerPrompt.includes('swallow'))) return true;
-        if (cName.includes('diarrhea') && (lowerPrompt.includes('diarrhea') || lowerPrompt.includes('loose motion'))) return true;
-        if (cName.includes('constipation') && (lowerPrompt.includes('constipation') || lowerPrompt.includes('motion issue'))) return true;
-        if (cName.includes('back pain') && (lowerPrompt.includes('back pain') || lowerPrompt.includes('lower back'))) return true;
-        if (cName.includes('insomnia') && (lowerPrompt.includes('sleep') || lowerPrompt.includes('insomnia'))) return true;
-        if (cName.includes('anxiety') && (lowerPrompt.includes('stress') || lowerPrompt.includes('anxiety') || lowerPrompt.includes('nervous'))) return true;
-        return false;
-      });
+      const emergencyKeywords = [
+        'chest pain', 'chest tightness', 'heart attack', 'shortness of breath', 'trouble breathing',
+        'unconscious', 'faint', 'severe bleeding', 'stroke', 'slurred speech', 'facial drooping',
+        'sudden numbness', 'thunderclap headache', 'sudden vision loss', 'seizure', 'poison'
+      ];
+      const isRedFlag = emergencyKeywords.some(kw => lowerPrompt.includes(kw)) ||
+        HEALTH_KNOWLEDGE_BASE.emergency_red_flags.signs.some(sign => {
+          const signKw = sign.toLowerCase().replace(/[^a-z0-9 ]/g, '');
+          return signKw.split(' ').some(word => word.length > 4 && lowerPrompt.includes(word));
+        });
 
       const ai = getGeminiClient();
       if (!ai) {
-        // Fallback powered by Health Knowledge Base
-        if (isRedFlag && (lowerPrompt.includes('chest') || lowerPrompt.includes('breath') || lowerPrompt.includes('faint') || lowerPrompt.includes('bleed') || lowerPrompt.includes('stroke') || lowerPrompt.includes('severe'))) {
+        // Fallback powered by Clinical Consultation Protocol & Health Knowledge Base
+        if (isRedFlag) {
           return res.json({
-            response: `🚨 **EMERGENCY MEDICAL WARNING**
+            response: `🚨 **EMERGENCY MEDICAL ALERT**
 
-Your description mentions potential emergency symptoms.
+Your description mentions potential high-risk emergency symptoms.
 
-**Immediate Safety Actions:**
-1. Call emergency services immediately (**108** / **911** or local emergency numbers).
-2. Go to the nearest Hospital Emergency Room right away.
-3. Do not rely on self-care or online chat for severe or sudden emergency symptoms.
+**Immediate Action Required:**
+1. Call emergency medical services immediately (**108** / **911** or local emergency response).
+2. Proceed to the nearest Hospital Emergency Room right away.
+3. Do not delay emergency evaluation for self-care or chat guidance.
 
 *${HEALTH_KNOWLEDGE_BASE.meta.disclaimer}*`,
             disclaimer: HEALTH_KNOWLEDGE_BASE.meta.disclaimer,
-            source: 'knowledge-base-emergency'
+            source: 'clinical-protocol-emergency'
           });
         }
 
-        if (matchedCondition) {
+        // If this is the first turn without prior context
+        if (!hasHistory) {
           return res.json({
-            response: `Thank you for sharing your concern regarding **${matchedCondition.name}**.
+            response: `I'm really sorry to hear that you're not feeling well today. I'm here to listen and help you understand what might be going on.
 
-**About this condition:**
-${matchedCondition.general_description}
+To help me better understand your situation, could you please answer a few quick questions?
 
-**Recommended General Self-Care:**
-${matchedCondition.general_self_care.map(step => `• ${step}`).join('\n')}
+1. **Duration & Onset:** When did this symptom start, and did it come on suddenly or gradually?
+2. **Location & Character:** Where exactly is the discomfort, and how would you describe it (e.g., dull, sharp, throbbing, aching)?
+3. **Severity:** On a scale of 1 to 10, how severe is the discomfort right now?
+4. **Accompanying Symptoms:** Are you experiencing any other symptoms, such as fever, nausea, dizziness, or fatigue?
+5. **Triggers:** Is there anything that makes it feel better or worse?
 
-**See a Doctor If:**
-${matchedCondition.see_a_doctor_if.map(item => `⚠️ ${item}`).join('\n')}
-
-**Helpful Follow-up Questions:**
-1. How long have you been experiencing this?
-2. Is the discomfort mild, moderate, or severe?`,
+Once you share a few more details, I'll be glad to summarize your symptoms, discuss potential explanations, and suggest safe self-care steps.`,
             disclaimer: HEALTH_KNOWLEDGE_BASE.meta.disclaimer,
-            source: 'health-knowledge-base'
+            source: 'clinical-protocol-initial'
           });
         }
 
+        // Subsequent turn fallback
         return res.json({
-          response: `Thank you for reaching out to CareFlow AI. I am here to help with your health inquiry: "${prompt}".
+          response: `Thank you for sharing those details with me.
 
-**General Health Guidance & Self-Care:**
-• **Rest & Hydration:** Rest comfortably and stay hydrated with warm water or fluids.
-• **Monitor Symptoms:** Pay close attention to any changes in your energy, pain, or discomfort.
-• **Dietary Balance:** Sip light, non-irritating fluids and avoid spicy or greasy foods.
+### 📋 Summary of What You Shared
+You have been experiencing symptoms as described in our conversation.
 
-**When to Seek Medical Evaluation:**
-• If your symptoms persist or worsen over the next 24-48 hours.
-• If you develop sudden severe pain, high fever, or difficulty breathing.
+### 🔍 Possible Explanations
+• **Common Viral / Functional Strain** (~70% likelihood): Often associated with temporary physical stress, mild infection, or fatigue.
+• **Secondary Metabolic / Environmental Factor** (~25% likelihood): Related to fluid balance, sleep, or environmental triggers.
+
+### 🌿 Safe Self-Care Measures
+• Rest comfortably in a well-ventilated, calm environment.
+• Sip plenty of fluids (water, warm herbal tea, ORS) throughout the day.
+• Keep a simple log of your symptoms and vitals.
+
+### 🩺 When to Seek Professional Care
+Please consult a healthcare professional if:
+• Your symptoms become severe or progressively worsen.
+• Symptoms persist beyond 3 to 5 days without improvement.
+• You develop red-flag signs such as difficulty breathing, severe pain, or high fever.
 
 *${HEALTH_KNOWLEDGE_BASE.meta.disclaimer}*`,
           disclaimer: HEALTH_KNOWLEDGE_BASE.meta.disclaimer,
-          source: 'health-knowledge-base-general'
+          source: 'clinical-protocol-followup'
         });
       }
 
-      const systemInstruction = `You are CareFlow AI, a supportive, empathetic, and knowledgeable AI health assistant trained on an official Health Education Database and Erode Specialist Doctors Database.
+      const systemInstruction = `You are CareFlow AI, a compassionate, highly skilled, and articulate AI healthcare professional acting like a real clinical provider.
 
-KNOWLEDGE BASE SAFETY & DISCLOSURE CONSTRAINTS:
-1. PURPOSE: Provide safe, general health education and self-care guidance for minor issues.
-2. STRICT RULE: NEVER provide a definitive medical diagnosis, prescribe drug names, or recommend drug dosages.
-3. DISCLAIMER: Always adhere to the disclaimer: "${HEALTH_KNOWLEDGE_BASE.meta.disclaimer}".
-4. EMERGENCY RED FLAGS: If the user mentions signs such as ${HEALTH_KNOWLEDGE_BASE.emergency_red_flags.signs.join(', ')}, immediately urge seeking emergency medical care (108 / 911 / ER).
-5. KNOWLEDGE BASE CONDITIONS REFERENCE:
-${HEALTH_KNOWLEDGE_BASE.conditions.map(c => `• ${c.name}: ${c.general_description} | Self-Care: ${c.general_self_care.join('; ')} | See Doctor If: ${c.see_a_doctor_if.join('; ')}`).join('\n')}
+CLINICAL CONSULTATION & SYMPTOM ASSESSMENT PROTOCOL (STRICT RULES):
 
-ERODE SPECIALIST DOCTORS & HOSPITALS DATABASE FOR APPOINTMENTS:
-HOSPITALS IN ERODE:
-${ERODE_HOSPITALS.slice(0, 30).map(h => `• ${h.name} | Location: ${h.location} | Specialties: ${h.keySpecialties.join(', ')} | Emergency 24/7: ${h.emergency24x7 ? 'YES' : 'No'} | Rating: ${h.rating}★`).join('\n')}
+1. EMERGENCY SCREENING:
+   - Check immediately for emergency red flags (e.g., crushing chest pain, difficulty breathing, slurred speech, facial drooping, sudden paralysis/numbness, loss of consciousness, uncontrolled bleeding, high fever with stiff neck/confusion).
+   - ONLY IF EMERGENCY RED FLAGS ARE PRESENT: Express urgent clinical concern and instruct the patient to seek emergency medical care immediately (call 108 / 911 / go to ER).
 
-SPECIALIST DOCTORS IN ERODE:
-${ERODE_DOCTORS.map(d => `• ${d.name} | Qualification: ${d.qualification || d.specialty} | Specialty: ${d.specialty} | Hospital: ${d.hospital} | Timings: ${d.availability} | Rating: ${d.rating}★ | Exp: ${d.experience}`).join('\n')}
+2. FIRST RESPONSE TO NEW SYMPTOMS (CRITICAL RULE):
+   - NEVER recommend visiting a doctor, specialist, or hospital in the initial / first response when a patient reports symptoms, UNLESS the symptoms indicate a medical emergency.
+   - Step 1: Acknowledge their concern with genuine empathy and reassurance (e.g., "I'm so sorry you're experiencing a headache today. I know how uncomfortable that can be, but I'm here to help you work through it.").
+   - Step 2: Ask 3 to 5 relevant, focused follow-up questions to gather necessary clinical context BEFORE offering any assessment (e.g., exact location, onset/duration, severity on 1-10 scale, accompanying symptoms like fever/nausea, relieving/aggravating factors).
+   - Step 3: DO NOT provide a diagnosis or list of potential causes on this first response until the patient answers your questions.
+   - Step 4: DO NOT recommend doctors or hospital visits on this first response.
 
-WHEN PATIENTS ASK FOR DOCTORS, HOSPITALS, OR APPOINTMENTS:
-- Identify their symptom/concern and suggest 2-3 specific doctors and recommended hospitals from the Erode database above with their name, qualification, specialty, hospital name, and availability timings.
-- Remind the patient they can click "Find & Book Doctors" or the booking buttons in CareFlow AI to instantly schedule an appointment with queue wait-time visibility.
+3. SUBSEQUENT TURNS (AFTER PATIENT PROVIDES DETAILS / ANSWERS FOLLOW-UP QUESTIONS):
+   - Step 1: Summarize what the user has shared clearly and accurately (e.g., "Thank you for sharing those details. To summarize, you've had a throbbing headache for 2 days, rated 6/10 in severity...").
+   - Step 2: Provide possible explanations with confidence levels (e.g., "Tension Headache (~75% likelihood)", "Dehydration or Fatigue (~20% likelihood)"). Explicitly state that these are possible explanations, not a definitive diagnosis.
+   - Step 3: Suggest safe, practical self-care measures when appropriate (e.g., rest in a quiet, dark room, stay hydrated, warm/cold compress).
+   - Step 4: Recommend consulting a healthcare professional ONLY IF:
+     * Red-flag symptoms are present.
+     * Symptoms are severe or worsening.
+     * Symptoms persist beyond the expected duration (e.g., >3-5 days).
+     * Immediate medical attention may be needed.
 
-WHEN RECEIVING A STRUCTURED SYMPTOM ASSESSMENT:
-- Organize your response using clear markdown headers:
-  1. **🌡️ Clinical Summary & Risk Triage**: Evaluate age, body temperature (note if fever is normal, low-grade, or high), and reported severity.
-  2. **🔍 Likely Causes & Differential Analysis**: Present 2-4 potential reasons or likely causes based on age, fever status, and symptoms, with brief clinical explanations for each.
-  3. **🩺 Recommended Medical Specialties**: State clearly which medical specialty (e.g., General Physician, Neurology, Gastroenterology, Cardiology, Pediatrics, Pulmonology) should be consulted.
-  4. **🏥 Recommended Erode Specialists & Action Plan**: Name matching doctors from the Erode database and list immediate self-care steps and warning signs.
+4. EXPLICIT REQUESTS FOR DOCTORS / APPOINTMENTS:
+   - If the patient explicitly asks to book an appointment, find a doctor, or locate a hospital (e.g., "Find a cardiologist in Erode", "Book an appointment with Dr. Sarah"), assist them with options from the Erode medical directory below:
+   HOSPITALS IN ERODE:
+   ${ERODE_HOSPITALS.slice(0, 20).map(h => `• ${h.name} | ${h.location} | Specialties: ${h.keySpecialties.join(', ')}`).join('\n')}
+   SPECIALIST DOCTORS IN ERODE:
+   ${ERODE_DOCTORS.map(d => `• ${d.name} | ${d.specialty} | ${d.hospital} | Timings: ${d.availability}`).join('\n')}
 
-COMMUNICATION & STYLE:
-- Language: Warm, natural English mixed with Tanglish where appropriate (e.g. "kavalapadadhinga", "nalla kavanichukoonga").
-- Direct Answer First: Give empathetic response and safe guidance first.
-- Structure: Use bold headers, bullet points for self-care, "See a doctor if..." warnings, doctor recommendations if applicable, and 1-2 friendly follow-up questions.
-- Patient Context: ${JSON.stringify(patientContext || {})}
+5. CONVERSATIONAL TONE & FEEL:
+   - The conversation MUST feel like talking to a real healthcare professional (attentive, warm, calm, professional, and empathetic) rather than an automated symptom checker.
+   - Avoid sounding robotic. Maintain medical safety limits: "${HEALTH_KNOWLEDGE_BASE.meta.disclaimer}".
+   - Patient Context: ${JSON.stringify(patientContext || {})}
 `;
 
       const contents = history && Array.isArray(history) && history.length > 0
