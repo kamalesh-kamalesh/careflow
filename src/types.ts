@@ -4,8 +4,9 @@ export interface Patient {
   id: string;
   name: string;
   age: number;
-  gender: 'Female' | 'Male' | 'Other';
+  gender: 'Female' | 'Male' | 'Other' | string;
   bloodType: string;
+  bloodGroup?: string;
   allergies: string[];
   conditions: string[];
   caregiverId: string | null;
@@ -28,9 +29,12 @@ export interface Patient {
   vitals: {
     bloodPressure: string;
     heartRate: number;
-    glucose: number;
-    weight: string;
-    oxygenLevel: number;
+    glucose?: number;
+    bloodSugar?: number;
+    weight?: string;
+    oxygenLevel?: number;
+    spO2?: number;
+    temperature?: number;
     lastUpdated: string;
   };
 }

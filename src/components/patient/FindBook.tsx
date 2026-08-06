@@ -490,7 +490,7 @@ export const FindBook: React.FC = () => {
                   }}
                   className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:border-teal-500 font-semibold text-slate-800"
                 >
-                  {ERODE_HOSPITALS.map(h => (
+                  {ALL_HOSPITALS.map(h => (
                     <option key={h.id} value={h.name}>
                       {h.name}
                     </option>

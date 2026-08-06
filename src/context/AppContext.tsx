@@ -48,6 +48,7 @@ interface AppContextType {
   getActivePatient: () => Patient | undefined;
   getActiveDoctor: () => Doctor | undefined;
   getActiveCaregiver: () => Caregiver | undefined;
+  registerNewPatient: (patientData: Partial<Patient>) => Patient;
   toastMessage: string | null;
   setToastMessage: (msg: string | null) => void;
 
@@ -430,6 +431,60 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     return caregivers[0];
   };
 
+  const registerNewPatient = (newPatientData: Partial<Patient>): Patient => {
+    const id = 'p_' + Date.now();
+    const newPatient: Patient = {
+      id,
+      name: newPatientData.name || 'New Patient',
+      age: newPatientData.age || 30,
+      gender: newPatientData.gender || 'Other',
+      bloodType: newPatientData.bloodGroup || newPatientData.bloodType || 'O+',
+      bloodGroup: newPatientData.bloodGroup || 'O+',
+      phone: newPatientData.phone || '',
+      email: newPatientData.email || '',
+      district: newPatientData.district || selectedDistrict || 'Erode',
+      location: newPatientData.location || '',
+      conditions: newPatientData.conditions || [],
+      allergies: newPatientData.allergies || [],
+      hasCurrentMedications: newPatientData.hasCurrentMedications || 'No',
+      currentMedicationsList: newPatientData.currentMedicationsList || '',
+      otherConditionDetails: newPatientData.otherConditionDetails || '',
+      otherAllergyDetails: newPatientData.otherAllergyDetails || '',
+      consentDataStorage: newPatientData.consentDataStorage ?? true,
+      emergencyContact: newPatientData.emergencyContact || {
+        name: '',
+        relationship: 'Emergency Contact',
+        phone: ''
+      },
+      vitals: {
+        bloodPressure: '120/80',
+        heartRate: 72,
+        spO2: 98,
+        oxygenLevel: 98,
+        temperature: 98.6,
+        bloodSugar: 100,
+        glucose: 100,
+        lastUpdated: 'Just now'
+      },
+      doctorId: 'doc1',
+      caregiverId: null,
+      lastVisit: 'Just now'
+    };
+
+    setPatients(prev => {
+      const updated = [newPatient, ...prev];
+      localStorage.setItem('careflow_patients', JSON.stringify(updated));
+      return updated;
+    });
+
+    setCurrentUser({ id: newPatient.id, role: 'patient', name: newPatient.name });
+    setActiveRole('patient');
+    localStorage.setItem('careflow_user', JSON.stringify({ id: newPatient.id, role: 'patient', name: newPatient.name }));
+    showToast(`Welcome ${newPatient.name}! Health intake profile created successfully.`);
+    speak(`Welcome to CareFlow AI, ${newPatient.name}`);
+    return newPatient;
+  };
+
   return (
     <AppContext.Provider
       value={{
@@ -455,6 +510,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         getActivePatient,
         getActiveDoctor,
         getActiveCaregiver,
+        registerNewPatient,
         toastMessage,
         setToastMessage,
         selectedDistrict,
