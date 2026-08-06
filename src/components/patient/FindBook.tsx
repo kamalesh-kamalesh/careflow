@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useAppContext } from '../../context/AppContext';
 import { Doctor, Hospital } from '../../types';
-import { ERODE_HOSPITALS } from '../../data/hospitalsData';
+import { ALL_HOSPITALS, SUPPORTED_DISTRICTS } from '../../data/hospitalsData';
 import {
   Search,
   Calendar,
@@ -22,16 +22,24 @@ import {
 } from 'lucide-react';
 
 export const FindBook: React.FC = () => {
-  const { doctors, getActivePatient, bookAppointment, speak } = useAppContext();
+  const { doctors, getActivePatient, bookAppointment, speak, selectedDistrict, setSelectedDistrict } = useAppContext();
   const patient = getActivePatient();
 
   const [activeTab, setActiveTab] = useState<'doctors' | 'hospitals'>('doctors');
   const [searchTerm, setSearchTerm] = useState('');
+  const [districtFilter, setDistrictFilter] = useState<string>(selectedDistrict || 'All');
   const [selectedSpecialty, setSelectedSpecialty] = useState<string>('All');
   const [selectedHospitalFilter, setSelectedHospitalFilter] = useState<string>('All');
   const [emergencyOnly, setEmergencyOnly] = useState<boolean>(false);
   const [selectedDoctor, setSelectedDoctor] = useState<Doctor | null>(null);
   const [bookedSuccess, setBookedSuccess] = useState<{ doctorName: string; date: string; time: string } | null>(null);
+
+  // Sync local districtFilter when global selectedDistrict changes
+  React.useEffect(() => {
+    if (selectedDistrict) {
+      setDistrictFilter(selectedDistrict);
+    }
+  }, [selectedDistrict]);
 
   // Booking Form state
   const [bookingDate, setBookingDate] = useState<string>(() => {
@@ -47,7 +55,7 @@ export const FindBook: React.FC = () => {
   const [patientNotes, setPatientNotes] = useState<string>('');
 
   const specialties = ['All', ...Array.from(new Set(doctors.map(doc => doc.specialty))).sort()];
-  const hospitalNames = ['All', ...ERODE_HOSPITALS.map(h => h.name)];
+  const availableHospitals = ALL_HOSPITALS;
 
   const filteredDoctors = doctors.filter(doc => {
     const term = searchTerm.toLowerCase();
@@ -55,20 +63,26 @@ export const FindBook: React.FC = () => {
       doc.name.toLowerCase().includes(term) ||
       doc.specialty.toLowerCase().includes(term) ||
       (doc.qualification && doc.qualification.toLowerCase().includes(term)) ||
-      doc.hospital.toLowerCase().includes(term);
+      doc.hospital.toLowerCase().includes(term) ||
+      (doc.district && doc.district.toLowerCase().includes(term));
     const matchesSpecialty = selectedSpecialty === 'All' || doc.specialty === selectedSpecialty;
     const matchesHospital = selectedHospitalFilter === 'All' || doc.hospital.toLowerCase().includes(selectedHospitalFilter.toLowerCase());
-    return matchesSearch && matchesSpecialty && matchesHospital;
+    const docDist = doc.district || 'Erode';
+    const matchesDistrict = districtFilter === 'All' || docDist === districtFilter;
+    return matchesSearch && matchesSpecialty && matchesHospital && matchesDistrict;
   });
 
-  const filteredHospitals = ERODE_HOSPITALS.filter(hosp => {
+  const filteredHospitals = ALL_HOSPITALS.filter(hosp => {
     const term = searchTerm.toLowerCase();
     const matchesSearch =
       hosp.name.toLowerCase().includes(term) ||
       hosp.location.toLowerCase().includes(term) ||
-      hosp.keySpecialties.some(s => s.toLowerCase().includes(term));
+      hosp.keySpecialties.some(s => s.toLowerCase().includes(term)) ||
+      (hosp.district && hosp.district.toLowerCase().includes(term));
     const matchesEmergency = !emergencyOnly || hosp.emergency24x7;
-    return matchesSearch && matchesEmergency;
+    const hospDist = hosp.district || 'Erode';
+    const matchesDistrict = districtFilter === 'All' || hospDist === districtFilter;
+    return matchesSearch && matchesEmergency && matchesDistrict;
   });
 
   const handleBookAtHospital = (hosp: Hospital) => {
@@ -171,12 +185,34 @@ export const FindBook: React.FC = () => {
               }`}
             >
               <HospitalIcon className="w-3.5 h-3.5" />
-              <span>Hospitals Map ({ERODE_HOSPITALS.length})</span>
+              <span>Hospitals Directory ({ALL_HOSPITALS.length})</span>
             </button>
           </div>
         </div>
 
         <div className="flex flex-col md:flex-row gap-3 pt-2 border-t border-slate-100">
+          {/* Location District Selector */}
+          <div className="flex items-center space-x-2">
+            <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider hidden sm:flex items-center gap-1">
+              <MapPin className="w-3.5 h-3.5 text-teal-600" /> Location:
+            </span>
+            <select
+              value={districtFilter}
+              onChange={e => {
+                setDistrictFilter(e.target.value);
+                if (e.target.value !== 'All') setSelectedDistrict(e.target.value);
+              }}
+              className="bg-teal-50 border border-teal-200 text-teal-950 font-bold px-3 py-2.5 text-xs rounded-xl focus:outline-none focus:border-teal-600 shadow-2xs cursor-pointer"
+            >
+              <option value="All">All Districts ({SUPPORTED_DISTRICTS.length})</option>
+              {SUPPORTED_DISTRICTS.map(d => (
+                <option key={d} value={d}>
+                  📍 {d} District
+                </option>
+              ))}
+            </select>
+          </div>
+
           <div className="relative flex-1">
             <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5" />
             <input
@@ -185,8 +221,8 @@ export const FindBook: React.FC = () => {
               onChange={e => setSearchTerm(e.target.value)}
               placeholder={
                 activeTab === 'doctors'
-                  ? 'Search doctor, qualification (MD, DM), specialty, or hospital...'
-                  : 'Search hospital name, location (Perundurai Road, Thindal), or specialty...'
+                  ? 'Search doctor, specialty, district or hospital...'
+                  : 'Search hospital name, location, district, or specialty...'
               }
               className="w-full pl-10 pr-4 py-2.5 text-xs border border-slate-200 rounded-xl focus:outline-none focus:border-teal-500 transition-colors"
             />
@@ -201,10 +237,10 @@ export const FindBook: React.FC = () => {
                   onChange={e => setSelectedHospitalFilter(e.target.value)}
                   className="bg-slate-50 border border-slate-200 px-3 py-2.5 text-xs font-semibold text-slate-700 rounded-xl focus:outline-none focus:border-teal-500 max-w-[180px] sm:max-w-[220px]"
                 >
-                  <option value="All">All Hospitals ({ERODE_HOSPITALS.length})</option>
-                  {ERODE_HOSPITALS.map(h => (
+                  <option value="All">All Hospitals ({ALL_HOSPITALS.length})</option>
+                  {ALL_HOSPITALS.map(h => (
                     <option key={h.id} value={h.name}>
-                      {h.name}
+                      {h.name} ({h.district})
                     </option>
                   ))}
                 </select>
@@ -272,9 +308,14 @@ export const FindBook: React.FC = () => {
 
                   {/* Info Pills */}
                   <div className="space-y-2 text-xs text-slate-600 mb-4">
-                    <div className="flex items-center space-x-2">
-                      <Building2 className="w-4 h-4 text-teal-600 flex-shrink-0" />
-                      <span className="truncate">{doc.hospital}</span>
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center space-x-2 min-w-0">
+                        <Building2 className="w-4 h-4 text-teal-600 flex-shrink-0" />
+                        <span className="truncate">{doc.hospital}</span>
+                      </div>
+                      <span className="text-[10px] bg-teal-50 text-teal-800 font-bold px-2 py-0.5 rounded-full border border-teal-200 shrink-0">
+                        📍 {doc.district || 'Erode'}
+                      </span>
                     </div>
                     <div className="flex items-center space-x-2">
                       <Clock className="w-4 h-4 text-slate-400 flex-shrink-0" />
@@ -337,6 +378,9 @@ export const FindBook: React.FC = () => {
                         <MapPin className="w-3.5 h-3.5 text-teal-600 flex-shrink-0" />
                         <span className="line-clamp-1">{hosp.location}</span>
                       </div>
+                      <span className="inline-block mt-1 text-[10px] bg-teal-50 text-teal-800 font-bold px-2 py-0.5 rounded-full border border-teal-200">
+                        📍 {hosp.district || 'Erode'} District
+                      </span>
                     </div>
                   </div>
 

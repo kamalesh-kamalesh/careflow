@@ -51,6 +51,10 @@ interface AppContextType {
   toastMessage: string | null;
   setToastMessage: (msg: string | null) => void;
 
+  // Location / District selection state
+  selectedDistrict: string;
+  setSelectedDistrict: (district: string) => void;
+
   // Offline Caching & Synchronization extensions
   isOffline: boolean;
   simulatedOffline: boolean;
@@ -127,6 +131,17 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   const [voiceGuidanceEnabled, setVoiceGuidanceEnabled] = useState<boolean>(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  // District / Location State
+  const [selectedDistrict, setSelectedDistrictState] = useState<string>(() => {
+    return localStorage.getItem('careflow_selected_district') || 'Erode';
+  });
+
+  const setSelectedDistrict = (district: string) => {
+    setSelectedDistrictState(district);
+    localStorage.setItem('careflow_selected_district', district);
+    setToastMessage(`Location set to ${district} District`);
+  };
 
   // Sync window online/offline events
   useEffect(() => {
@@ -442,6 +457,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         getActiveCaregiver,
         toastMessage,
         setToastMessage,
+        selectedDistrict,
+        setSelectedDistrict,
 
         // Offline Caching & Sync Context exports
         isOffline,

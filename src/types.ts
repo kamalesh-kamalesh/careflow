@@ -13,6 +13,13 @@ export interface Patient {
   lastVisit: string;
   phone: string;
   email: string;
+  district?: string;
+  location?: string;
+  hasCurrentMedications?: 'Yes' | 'No';
+  currentMedicationsList?: string;
+  otherConditionDetails?: string;
+  otherAllergyDetails?: string;
+  consentDataStorage?: boolean;
   emergencyContact: {
     name: string;
     relationship: string;
@@ -42,6 +49,7 @@ export interface Doctor {
   avatarUrl?: string;
   currentQueueCount: number;
   avgConsultationTimeMins: number;
+  district?: string;
 }
 
 export interface Appointment {
@@ -148,6 +156,7 @@ export interface Hospital {
   name: string;
   keySpecialties: string[];
   location: string;
+  district?: string;
   phone?: string;
   emergency24x7?: boolean;
   rating?: number;

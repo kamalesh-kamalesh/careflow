@@ -1,5 +1,5 @@
 import { Patient, Doctor, Appointment, Medicine, Caregiver, HealthAlert } from '../types';
-import { ERODE_DOCTORS } from './hospitalsData';
+import { ALL_DOCTORS } from './hospitalsData';
 
 export const getTodayDateString = (offsetDays = 0): string => {
   const d = new Date();
@@ -131,7 +131,7 @@ export const seedDoctors: Doctor[] = [
     currentQueueCount: 2,
     avgConsultationTimeMins: 15
   },
-  ...ERODE_DOCTORS
+  ...ALL_DOCTORS
 ];
 
 export const seedAppointments: Appointment[] = [

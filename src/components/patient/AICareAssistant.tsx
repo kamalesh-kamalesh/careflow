@@ -4,7 +4,7 @@ import { useAppContext } from '../../context/AppContext';
 import { ChatMessage, ReportAnalysis, Doctor, Appointment } from '../../types';
 import { MedicalDisclaimer } from '../common/MedicalDisclaimer';
 import { HospitalService } from '../../services/HospitalService';
-import { ERODE_HOSPITALS } from '../../data/hospitalsData';
+import { ALL_HOSPITALS } from '../../data/hospitalsData';
 import {
   MessageSquareHeart,
   Send,
@@ -34,6 +34,8 @@ import {
   ClipboardList,
   Activity,
   AlertTriangle,
+  History,
+  Trash2,
   X
 } from 'lucide-react';
 
@@ -42,7 +44,7 @@ interface AICareAssistantProps {
 }
 
 export const AICareAssistant: React.FC<AICareAssistantProps> = ({ setActiveTab }) => {
-  const { getActivePatient, medicines, appointments, doctors, bookAppointment, updateAppointmentStatus, speak } = useAppContext();
+  const { getActivePatient, medicines, appointments, doctors, bookAppointment, updateAppointmentStatus, speak, selectedDistrict } = useAppContext();
   const patient = getActivePatient();
 
   const [activeSubTab, setActiveSubTab] = useState<'chat' | 'report'>('chat');
@@ -50,10 +52,53 @@ export const AICareAssistant: React.FC<AICareAssistantProps> = ({ setActiveTab }
   // Appointment slip modal state
   const [selectedSlipApp, setSelectedSlipApp] = useState<Appointment | null>(null);
 
-  // Chat state
-  const [messages, setMessages] = useState<ChatMessage[]>([
-    {
-      id: 'm1',
+  const storageKey = `careflow_ai_chat_history_${patient?.id || 'default'}`;
+
+  const defaultWelcomeMessage: ChatMessage = {
+    id: 'm1',
+    sender: 'assistant',
+    text: `Hello ${patient?.name || 'Jane'}! 👋 I am **CareFlow AI**, your friendly personal health companion.
+
+I can help you analyze your symptoms, find top specialists in ${selectedDistrict || 'Erode'}, and **book appointments directly inside this chat!**
+
+**How can I help you feel better or support your health today?**`,
+    timestamp: 'Just now'
+  };
+
+  // Chat state initialized from localStorage
+  const [messages, setMessages] = useState<ChatMessage[]>(() => {
+    try {
+      const saved = localStorage.getItem(`careflow_ai_chat_history_${patient?.id || 'default'}`);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed;
+        }
+      }
+    } catch (e) {
+      console.error('Failed to load chat history from localStorage', e);
+    }
+    return [defaultWelcomeMessage];
+  });
+
+  // Save messages to localStorage whenever messages change
+  useEffect(() => {
+    try {
+      localStorage.setItem(storageKey, JSON.stringify(messages));
+    } catch (e) {
+      console.error('Failed to save chat history to localStorage', e);
+    }
+  }, [messages, storageKey]);
+
+  // Handle clearing stored chat history
+  const handleClearHistory = () => {
+    try {
+      localStorage.removeItem(storageKey);
+    } catch (e) {
+      console.error('Failed to remove chat history from localStorage', e);
+    }
+    setMessages([{
+      id: `m1_${Date.now()}`,
       sender: 'assistant',
       text: `Hello ${patient?.name || 'Jane'}! 👋 I am **CareFlow AI**, your friendly personal health companion.
 
@@ -61,8 +106,34 @@ I can help you analyze your symptoms, find top specialists in Erode, and **book 
 
 **How can I help you feel better or support your health today?**`,
       timestamp: 'Just now'
-    }
-  ]);
+    }]);
+  };
+
+  // Export symptom analysis & chat history to CSV
+  const handleExportCSV = () => {
+    if (!messages || messages.length === 0) return;
+
+    const headers = ['Timestamp', 'Sender', 'Content', 'Matched Specialty'];
+    const rows = messages.map(msg => {
+      const timestamp = `"${(msg.timestamp || '').replace(/"/g, '""')}"`;
+      const sender = `"${(msg.sender === 'user' ? 'Patient' : 'CareFlow AI').replace(/"/g, '""')}"`;
+      const content = `"${(msg.text || '').replace(/"/g, '""')}"`;
+      const specialty = `"${(msg.bookingData?.specialty || '').replace(/"/g, '""')}"`;
+      return [timestamp, sender, content, specialty].join(',');
+    });
+
+    const csvContent = [headers.join(','), ...rows].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    const fileName = `CareFlow_Symptom_History_${patient?.name ? patient.name.replace(/\s+/g, '_') : 'Patient'}_${new Date().toISOString().slice(0, 10)}.csv`;
+    link.setAttribute('download', fileName);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
   const [inputPrompt, setInputPrompt] = useState('');
   const [loadingChat, setLoadingChat] = useState(false);
 
@@ -138,8 +209,16 @@ I can help you analyze your symptoms, find top specialists in Erode, and **book 
       specialty = 'Orthopedics';
     }
 
-    // Get matching doctors from database
+    // Get matching doctors from database and filter/sort by selected district
     let matchedDocs = HospitalService.filterDoctorsBySpecialty(specialty, doctors);
+    
+    // Sort so doctors in selected district appear first
+    if (selectedDistrict) {
+      const districtDocs = matchedDocs.filter(d => (d.district || 'Erode') === selectedDistrict);
+      const otherDocs = matchedDocs.filter(d => (d.district || 'Erode') !== selectedDistrict);
+      matchedDocs = [...districtDocs, ...otherDocs];
+    }
+
     if (matchedDocs.length === 0) {
       matchedDocs = doctors.slice(0, 3);
     }
@@ -147,11 +226,11 @@ I can help you analyze your symptoms, find top specialists in Erode, and **book 
     const availableSlots = ['10:30 AM', '11:00 AM', '12:15 PM', '04:00 PM'];
 
     const formattedDoctors = matchedDocs.slice(0, 3).map((doc, idx) => {
-      const hosp = ERODE_HOSPITALS.find(h => h.name.toLowerCase().includes(doc.hospital.toLowerCase())) || ERODE_HOSPITALS[idx % ERODE_HOSPITALS.length];
+      const hosp = ALL_HOSPITALS.find(h => h.name.toLowerCase().includes(doc.hospital.toLowerCase())) || ALL_HOSPITALS[idx % ALL_HOSPITALS.length];
       return {
         doctor: doc,
         hospitalName: hosp?.name || doc.hospital,
-        location: hosp?.location || 'Erode',
+        location: hosp?.location || (doc.district ? `${doc.district} District` : 'Erode'),
         distance: `${(2.1 + idx * 0.8).toFixed(1)} km`,
         fee: `₹${300 + idx * 50}`,
         rating: doc.rating || 4.8,
@@ -643,6 +722,38 @@ Patient: Jane Doe | Age: 45 | Date: 2026-06-10
 
       {activeSubTab === 'chat' ? (
         <div className="bg-white border border-slate-200 rounded-2xl shadow-xs flex flex-col h-[620px] overflow-hidden">
+          {/* Chat History Status Header */}
+          <div className="px-4 py-2.5 bg-slate-50 border-b border-slate-200 flex items-center justify-between text-xs">
+            <div className="flex items-center space-x-2 text-slate-600 font-medium">
+              <History className="w-4 h-4 text-teal-600" />
+              <span>Session History</span>
+              <span className="bg-teal-100 text-teal-800 text-[10px] font-bold px-2 py-0.5 rounded-full border border-teal-200 flex items-center space-x-1">
+                <CheckCircle2 className="w-3 h-3 text-teal-600" />
+                <span>Saved locally ({messages.length} {messages.length === 1 ? 'message' : 'messages'})</span>
+              </span>
+            </div>
+            <div className="flex items-center space-x-2">
+              <button
+                onClick={handleExportCSV}
+                className="text-slate-700 hover:text-teal-700 font-semibold flex items-center space-x-1 text-[11px] transition-colors cursor-pointer bg-white px-2.5 py-1 rounded-lg border border-slate-200 shadow-2xs hover:border-teal-300"
+                title="Export symptom analysis & chat history to CSV for long-term health tracking"
+              >
+                <Download className="w-3.5 h-3.5 text-teal-600" />
+                <span>Export CSV</span>
+              </button>
+              {messages.length > 1 && (
+                <button
+                  onClick={handleClearHistory}
+                  className="text-slate-500 hover:text-red-600 font-semibold flex items-center space-x-1 text-[11px] transition-colors cursor-pointer bg-white px-2.5 py-1 rounded-lg border border-slate-200 shadow-2xs hover:border-red-300"
+                  title="Clear session history from local storage"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Clear History</span>
+                </button>
+              )}
+            </div>
+          </div>
+
           {/* Messages Area */}
           <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4">
             {messages.map(msg => {
