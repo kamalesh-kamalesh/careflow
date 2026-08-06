@@ -347,7 +347,7 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
       {/* Background Decorative Blur */}
       <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-teal-600/15 rounded-full blur-3xl pointer-events-none"></div>
 
-      <div className="max-w-2xl w-full bg-white border border-slate-200/80 rounded-2xl sm:rounded-3xl shadow-2xl overflow-hidden relative z-10 my-4">
+      <div className="max-w-2xl w-full bg-white border border-slate-200/80 rounded-2xl sm:rounded-3xl shadow-2xl overflow-hidden relative z-10 my-4 animate-in fade-in slide-in-from-bottom-4 duration-700 ease-out">
         {/* Portal Header */}
         <div className="bg-slate-950 p-6 sm:p-8 text-white relative border-b border-slate-800">
           <div className="flex items-center justify-between">

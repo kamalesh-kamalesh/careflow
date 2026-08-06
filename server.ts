@@ -1,6 +1,5 @@
 import express from 'express';
 import path from 'path';
-import { fileURLToPath } from 'url';
 import { createServer as createViteServer } from 'vite';
 import { GoogleGenAI } from '@google/genai';
 import dotenv from 'dotenv';
@@ -8,9 +7,6 @@ import { ERODE_HOSPITALS, ERODE_DOCTORS } from './src/data/hospitalsData';
 import { HEALTH_KNOWLEDGE_BASE } from './src/data/healthKnowledgeBase';
 
 dotenv.config();
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 async function startServer() {
   const app = express();

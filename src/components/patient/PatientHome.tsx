@@ -1,4 +1,16 @@
 import React, { useState } from 'react';
+import {
+  AreaChart,
+  Area,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  LineChart,
+  Line,
+  Legend
+} from 'recharts';
 import { useAppContext } from '../../context/AppContext';
 import { MedicalDisclaimer } from '../common/MedicalDisclaimer';
 import { DoctorRecommendation } from '../common/DoctorRecommendation';
@@ -316,6 +328,93 @@ export const PatientHome: React.FC<PatientHomeProps> = ({ setActiveTab }) => {
             View appointment status, queue positions, and doctor clinical notes.
           </p>
         </button>
+      </div>
+
+      {/* Health Trend Analytics Dashboard */}
+      <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs">
+        <div className="flex items-center justify-between mb-6 pb-3 border-b border-slate-100">
+          <div>
+            <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
+              <TrendingUp className="w-5 h-5 text-teal-600" />
+              7-Day Health Analytics
+            </h2>
+            <p className="text-xs text-slate-500">Track your vital trends and activity levels</p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          {/* Heart Rate Trend */}
+          <div className="h-64">
+            <h3 className="text-xs font-bold text-slate-700 mb-4 uppercase tracking-wider text-center">Resting Heart Rate Trend</h3>
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={[
+                { day: 'Mon', heartRate: 72 },
+                { day: 'Tue', heartRate: 75 },
+                { day: 'Wed', heartRate: 71 },
+                { day: 'Thu', heartRate: 74 },
+                { day: 'Fri', heartRate: 78 },
+                { day: 'Sat', heartRate: 70 },
+                { day: 'Sun', heartRate: Number(hr) || 74 },
+              ]}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                <XAxis dataKey="day" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#64748b' }} />
+                <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#64748b' }} domain={['dataMin - 5', 'dataMax + 5']} />
+                <Tooltip
+                  contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
+                  labelStyle={{ fontWeight: 'bold', color: '#0f172a' }}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="heartRate"
+                  name="Heart Rate (BPM)"
+                  stroke="#0d9488"
+                  strokeWidth={3}
+                  dot={{ r: 4, strokeWidth: 2, fill: '#fff' }}
+                  activeDot={{ r: 6, fill: '#0d9488' }}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+
+          {/* Activity / Steps Trend */}
+          <div className="h-64">
+            <h3 className="text-xs font-bold text-slate-700 mb-4 uppercase tracking-wider text-center">Daily Activity (Steps)</h3>
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={[
+                { day: 'Mon', steps: 4200 },
+                { day: 'Tue', steps: 5100 },
+                { day: 'Wed', steps: 6300 },
+                { day: 'Thu', steps: 4800 },
+                { day: 'Fri', steps: 7100 },
+                { day: 'Sat', steps: 8500 },
+                { day: 'Sun', steps: 6800 },
+              ]}>
+                <defs>
+                  <linearGradient id="colorSteps" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3} />
+                    <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                <XAxis dataKey="day" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#64748b' }} />
+                <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#64748b' }} />
+                <Tooltip
+                  contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
+                  labelStyle={{ fontWeight: 'bold', color: '#0f172a' }}
+                />
+                <Area
+                  type="monotone"
+                  dataKey="steps"
+                  name="Steps Count"
+                  stroke="#3b82f6"
+                  strokeWidth={3}
+                  fillOpacity={1}
+                  fill="url(#colorSteps)"
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
       </div>
 
       {/* Today's Schedule & Reminders Section */}

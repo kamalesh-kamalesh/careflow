@@ -10,7 +10,16 @@ export const SUPPORTED_DISTRICTS = [
   'Tiruchirappalli',
   'Namakkal',
   'Karur',
-  'Nilgiris'
+  'Nilgiris',
+  'Vellore',
+  'Thanjavur',
+  'Dindigul',
+  'Virudhunagar',
+  'Theni',
+  'Dharmapuri',
+  'Krishnagiri',
+  'Kanyakumari',
+  'Tirunelveli'
 ] as const;
 
 export type SupportedDistrict = typeof SUPPORTED_DISTRICTS[number];
