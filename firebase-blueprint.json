@@ -1,0 +1,65 @@
+{
+  "version": "1.0",
+  "collections": [
+    {
+      "name": "patients",
+      "description": "Stores patient profiles and vitals",
+      "fields": [
+        { "name": "name", "type": "string" },
+        { "name": "age", "type": "number" },
+        { "name": "gender", "type": "string" },
+        { "name": "bloodType", "type": "string" },
+        { "name": "email", "type": "string" }
+      ],
+      "rules": [
+        { "allow": "read, write", "condition": "true" }
+      ]
+    },
+    {
+      "name": "doctors",
+      "description": "Stores doctor profiles",
+      "fields": [
+        { "name": "name", "type": "string" },
+        { "name": "specialty", "type": "string" }
+      ],
+      "rules": [
+        { "allow": "read, write", "condition": "true" }
+      ]
+    },
+    {
+      "name": "appointments",
+      "description": "Stores appointments",
+      "fields": [
+        { "name": "patientId", "type": "string" },
+        { "name": "doctorId", "type": "string" },
+        { "name": "date", "type": "string" },
+        { "name": "time", "type": "string" },
+        { "name": "status", "type": "string" }
+      ],
+      "rules": [
+        { "allow": "read, write", "condition": "true" }
+      ]
+    },
+    {
+      "name": "medicines",
+      "description": "Stores medications",
+      "fields": [
+        { "name": "patientId", "type": "string" },
+        { "name": "name", "type": "string" }
+      ],
+      "rules": [
+        { "allow": "read, write", "condition": "true" }
+      ]
+    },
+    {
+      "name": "alerts",
+      "description": "Stores health alerts",
+      "fields": [
+        { "name": "patientId", "type": "string" }
+      ],
+      "rules": [
+        { "allow": "read, write", "condition": "true" }
+      ]
+    }
+  ]
+}

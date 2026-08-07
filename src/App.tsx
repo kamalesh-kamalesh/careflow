@@ -19,7 +19,7 @@ import { NotificationManager } from './components/common/NotificationManager';
 
 const MainAppContent: React.FC = () => {
   const { activeRole, toastMessage } = useAppContext();
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [isLoggedIn, setIsLoggedIn] = useState(true);
   const [activeTab, setActiveTab] = useState('home');
 
   if (!isLoggedIn) {

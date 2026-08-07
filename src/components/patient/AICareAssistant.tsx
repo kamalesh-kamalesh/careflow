@@ -226,7 +226,7 @@ I can help you analyze your symptoms, find top specialists in Erode, and **book 
     const availableSlots = ['10:30 AM', '11:00 AM', '12:15 PM', '04:00 PM'];
 
     const formattedDoctors = matchedDocs.slice(0, 3).map((doc, idx) => {
-      const hosp = ALL_HOSPITALS.find(h => h.name.toLowerCase().includes(doc.hospital.toLowerCase())) || ALL_HOSPITALS[idx % ALL_HOSPITALS.length];
+      const hosp = ALL_HOSPITALS.find(h => h.name.toLowerCase().includes((doc.hospital || '').toLowerCase())) || ALL_HOSPITALS[idx % ALL_HOSPITALS.length];
       return {
         doctor: doc,
         hospitalName: hosp?.name || doc.hospital,
@@ -553,16 +553,22 @@ Based on your request, here are top **${specialty}** specialists and available a
       };
 
       setMessages(prev => [...prev, botMsg]);
-      const plainSpeechText = botMsg.text.replace(/[*#_~`\-]/g, ' ').replace(/\s+/g, ' ').trim();
-      speak(plainSpeechText.slice(0, 180));
-    } catch (err) {
-      console.error(err);
+      try {
+        if (botMsg.text) {
+          const plainSpeechText = String(botMsg.text).replace(/[*#_~\`\-]/g, ' ').replace(/\s+/g, ' ').trim();
+          speak(plainSpeechText.slice(0, 180));
+        }
+      } catch (speechErr) {
+        console.warn('Speech synthesis failed:', speechErr);
+      }
+    } catch (err: any) {
+      console.error('Chat error:', err);
       setMessages(prev => [
         ...prev,
         {
           id: `msg_err_${Date.now()}`,
           sender: 'assistant',
-          text: 'Thank you for your inquiry. How else can I assist with your appointments or health questions?',
+          text: "I'm having trouble connecting right now. Please try again or consult your doctor directly.",
           timestamp: 'Just now'
         }
       ]);
