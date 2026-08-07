@@ -1,0 +1,802 @@
+diff --git a/server.ts b/server.ts
+index 7a487a7..019378c 100644
+--- a/server.ts
++++ b/server.ts
+@@ -1,5 +1,7 @@
+ import express from 'express';
+ import path from 'path';
++import http from 'http';
++import { WebSocketServer, WebSocket } from 'ws';
+ import { createServer as createViteServer } from 'vite';
+ import { GoogleGenAI } from '@google/genai';
+ import dotenv from 'dotenv';
+@@ -564,6 +566,61 @@ Analyze these symptoms and return a JSON object strictly following this structur
+     return res.json(recommendations);
+   });
+ 
++  // AI Wait-Time Insight API
++  // Note: the numeric ETA itself is computed deterministically on the client from
++  // real queue data (see recalcDoctorQueue in AppContext.tsx) so it can never drift
++  // or hallucinate. This endpoint only asks Gemini for a short, friendly one-line
++  // explanation of *why* the wait is what it is, grounded in the numbers we pass in.
++  app.post('/api/ai/predict-wait-time', async (req, res) => {
++    try {
++      const { doctorName, specialty, queue } = req.body || {};
++      const queueList = Array.isArray(queue) ? queue : [];
++      if (queueList.length === 0) {
++        return res.json({ insights: [] });
++      }
++
++      const ai = getGeminiClient();
++      if (!ai) {
++        const insights = queueList.map((q: any) => ({
++          appointmentId: q.appointmentId,
++          insight: q.priority === 'Urgent' || q.priority === 'High Risk'
++            ? `Prioritized ahead of the standard queue due to ${q.priority.toLowerCase()} status.`
++            : `Estimate based on today's actual consultation pace so far.`
++        }));
++        return res.json({ insights });
++      }
++
++      const systemInstruction = `You are CareFlow AI's queue assistant. You will be given a doctor's live patient queue with each patient's position, priority level, and an already-computed wait estimate in minutes. For EACH patient, write one short (under 18 words), reassuring, plain-English sentence explaining their wait — reference their queue position and, if relevant, why urgent/high-risk patients move faster. Do not invent numbers not given to you.
++
++Return a JSON object: { "insights": [{ "appointmentId": string, "insight": string }] } with one entry per patient, in the same order given.`;
++
++      const aiResponse = await generateContentWithFallback(ai, {
++        contents: {
++          parts: [{
++            text: `Doctor: ${doctorName || 'the doctor'} (${specialty || 'General'})\nQueue:\n${JSON.stringify(queueList, null, 2)}`
++          }]
++        },
++        config: {
++          systemInstruction,
++          responseMimeType: 'application/json',
++        }
++      });
++
++      const rawText = aiResponse.text || '{"insights": []}';
++      let parsed: any = {};
++      try {
++        parsed = JSON.parse(rawText);
++      } catch {
++        parsed = { insights: [] };
++      }
++
++      return res.json({ insights: Array.isArray(parsed.insights) ? parsed.insights : [] });
++    } catch (error: any) {
++      console.error('Wait-Time Insight Error:', error);
++      return res.status(500).json({ error: 'Failed to generate wait-time insight', message: error.message });
++    }
++  });
++
+   // Appointment Booking Endpoint
+   app.post('/api/appointments/book', (req, res) => {
+     const { patientId, doctorId, date, time, reason } = req.body;
+@@ -604,8 +661,65 @@ Analyze these symptoms and return a JSON object strictly following this structur
+     });
+   }
+ 
+-  app.listen(PORT, '0.0.0.0', () => {
++  const httpServer = http.createServer(app);
++
++  // --- WebRTC Signaling (simple room-based relay, no 3rd-party service) ---
++  // Each browser tab connects here to exchange SDP offers/answers and ICE
++  // candidates with the other participant in the same appointment. No video
++  // or audio ever passes through this server — once connected, media flows
++  // directly peer-to-peer between the two browsers.
++  const wss = new WebSocketServer({ server: httpServer, path: '/ws-signal' });
++  const rooms = new Map<string, Set<WebSocket>>();
++
++  wss.on('connection', (socket, req) => {
++    const url = new URL(req.url || '', 'http://localhost');
++    const roomId = url.searchParams.get('room');
++    if (!roomId) {
++      socket.close(1008, 'Missing room id');
++      return;
++    }
++
++    if (!rooms.has(roomId)) rooms.set(roomId, new Set());
++    const room = rooms.get(roomId)!;
++
++    if (room.size >= 2) {
++      socket.send(JSON.stringify({ type: 'room-full' }));
++      socket.close(1008, 'Room full');
++      return;
++    }
++
++    room.add(socket);
++    // Let the other participant (if already waiting) know someone joined,
++    // so it can kick off the WebRTC offer.
++    room.forEach(peer => {
++      if (peer !== socket && peer.readyState === WebSocket.OPEN) {
++        peer.send(JSON.stringify({ type: 'peer-joined' }));
++      }
++    });
++
++    socket.on('message', raw => {
++      // Relay signaling messages (offer / answer / ice-candidate) to the other peer in the room
++      room.forEach(peer => {
++        if (peer !== socket && peer.readyState === WebSocket.OPEN) {
++          peer.send(raw.toString());
++        }
++      });
++    });
++
++    socket.on('close', () => {
++      room.delete(socket);
++      room.forEach(peer => {
++        if (peer.readyState === WebSocket.OPEN) {
++          peer.send(JSON.stringify({ type: 'peer-left' }));
++        }
++      });
++      if (room.size === 0) rooms.delete(roomId);
++    });
++  });
++
++  httpServer.listen(PORT, '0.0.0.0', () => {
+     console.log(`CareFlow AI Server running on http://0.0.0.0:${PORT}`);
++    console.log(`WebRTC signaling available at ws://0.0.0.0:${PORT}/ws-signal`);
+   });
+ }
+ 
+diff --git a/src/components/common/VideoConsult.tsx b/src/components/common/VideoConsult.tsx
+new file mode 100644
+index 0000000..b35d706
+--- /dev/null
++++ b/src/components/common/VideoConsult.tsx
+@@ -0,0 +1,248 @@
++import React, { useEffect, useRef, useState } from 'react';
++import { Mic, MicOff, Video, VideoOff, PhoneOff, Loader2, Users } from 'lucide-react';
++
++interface VideoConsultProps {
++  roomId: string; // typically the appointment id — both participants must pass the same value
++  displayName: string; // shown to the other participant
++  role: 'doctor' | 'patient';
++  onClose: () => void;
++}
++
++type CallStatus = 'connecting-signal' | 'waiting-for-peer' | 'connecting-media' | 'in-call' | 'ended' | 'error';
++
++// Public STUN server for NAT traversal only — no video/audio/API keys involved.
++// It never sees call content, just helps two browsers find a direct path to each other.
++const ICE_SERVERS = [{ urls: 'stun:stun.l.google.com:19302' }];
++
++export const VideoConsult: React.FC<VideoConsultProps> = ({ roomId, displayName, role, onClose }) => {
++  const localVideoRef = useRef<HTMLVideoElement>(null);
++  const remoteVideoRef = useRef<HTMLVideoElement>(null);
++  const wsRef = useRef<WebSocket | null>(null);
++  const pcRef = useRef<RTCPeerConnection | null>(null);
++  const localStreamRef = useRef<MediaStream | null>(null);
++
++  const [status, setStatus] = useState<CallStatus>('connecting-signal');
++  const [errorMsg, setErrorMsg] = useState<string>('');
++  const [micOn, setMicOn] = useState(true);
++  const [camOn, setCamOn] = useState(true);
++  const [elapsedSec, setElapsedSec] = useState(0);
++
++  useEffect(() => {
++    let cancelled = false;
++
++    const cleanup = () => {
++      wsRef.current?.close();
++      pcRef.current?.close();
++      localStreamRef.current?.getTracks().forEach(t => t.stop());
++    };
++
++    const start = async () => {
++      try {
++        const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
++        if (cancelled) {
++          stream.getTracks().forEach(t => t.stop());
++          return;
++        }
++        localStreamRef.current = stream;
++        if (localVideoRef.current) localVideoRef.current.srcObject = stream;
++
++        const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
++        pcRef.current = pc;
++        stream.getTracks().forEach(track => pc.addTrack(track, stream));
++
++        pc.ontrack = (event) => {
++          if (remoteVideoRef.current) remoteVideoRef.current.srcObject = event.streams[0];
++          setStatus('in-call');
++        };
++
++        pc.onconnectionstatechange = () => {
++          if (pc.connectionState === 'failed' || pc.connectionState === 'closed') {
++            setStatus(prev => (prev === 'ended' ? prev : 'error'));
++            setErrorMsg('Connection lost.');
++          }
++        };
++
++        const proto = window.location.protocol === 'https:' ? 'wss' : 'ws';
++        const ws = new WebSocket(`${proto}://${window.location.host}/ws-signal?room=${encodeURIComponent(roomId)}`);
++        wsRef.current = ws;
++
++        pc.onicecandidate = (event) => {
++          if (event.candidate && ws.readyState === WebSocket.OPEN) {
++            ws.send(JSON.stringify({ type: 'ice-candidate', candidate: event.candidate }));
++          }
++        };
++
++        ws.onopen = () => setStatus('waiting-for-peer');
++
++        ws.onerror = () => {
++          setStatus('error');
++          setErrorMsg('Could not reach the signaling server. If this app is running on Vercel serverless hosting, video calls need a persistent Node server instead (e.g. Render/Railway) since Vercel functions don\'t keep WebSocket connections open.');
++        };
++
++        ws.onmessage = async (event) => {
++          const msg = JSON.parse(event.data);
++
++          if (msg.type === 'room-full') {
++            setStatus('error');
++            setErrorMsg('This consult room already has two participants.');
++            return;
++          }
++
++          if (msg.type === 'peer-joined') {
++            // The doctor's browser initiates the offer once the patient joins (and vice versa
++            // if the patient opened the room first) — whoever gets notified of a new peer offers.
++            setStatus('connecting-media');
++            const offer = await pc.createOffer();
++            await pc.setLocalDescription(offer);
++            ws.send(JSON.stringify({ type: 'offer', sdp: offer }));
++            return;
++          }
++
++          if (msg.type === 'offer') {
++            setStatus('connecting-media');
++            await pc.setRemoteDescription(new RTCSessionDescription(msg.sdp));
++            const answer = await pc.createAnswer();
++            await pc.setLocalDescription(answer);
++            ws.send(JSON.stringify({ type: 'answer', sdp: answer }));
++            return;
++          }
++
++          if (msg.type === 'answer') {
++            await pc.setRemoteDescription(new RTCSessionDescription(msg.sdp));
++            return;
++          }
++
++          if (msg.type === 'ice-candidate' && msg.candidate) {
++            try {
++              await pc.addIceCandidate(new RTCIceCandidate(msg.candidate));
++            } catch {
++              // benign if it arrives before remote description is set
++            }
++            return;
++          }
++
++          if (msg.type === 'peer-left') {
++            setStatus('ended');
++            setErrorMsg('The other participant left the call.');
++          }
++        };
++      } catch (err: any) {
++        setStatus('error');
++        setErrorMsg(err?.message || 'Could not access camera/microphone.');
++      }
++    };
++
++    start();
++    return () => {
++      cancelled = true;
++      cleanup();
++    };
++    // eslint-disable-next-line react-hooks/exhaustive-deps
++  }, [roomId]);
++
++  useEffect(() => {
++    if (status !== 'in-call') return;
++    const timer = setInterval(() => setElapsedSec(s => s + 1), 1000);
++    return () => clearInterval(timer);
++  }, [status]);
++
++  const formatTime = (s: number) => `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
++
++  const toggleMic = () => {
++    localStreamRef.current?.getAudioTracks().forEach(t => (t.enabled = !t.enabled));
++    setMicOn(m => !m);
++  };
++
++  const toggleCam = () => {
++    localStreamRef.current?.getVideoTracks().forEach(t => (t.enabled = !t.enabled));
++    setCamOn(c => !c);
++  };
++
++  const endCall = () => {
++    setStatus('ended');
++    wsRef.current?.close();
++    pcRef.current?.close();
++    localStreamRef.current?.getTracks().forEach(t => t.stop());
++    onClose();
++  };
++
++  const statusLabel: Record<CallStatus, string> = {
++    'connecting-signal': 'Connecting…',
++    'waiting-for-peer': `Waiting for the ${role === 'doctor' ? 'patient' : 'doctor'} to join…`,
++    'connecting-media': 'Establishing video connection…',
++    'in-call': `Live • ${formatTime(elapsedSec)}`,
++    'ended': 'Call ended',
++    'error': 'Connection issue'
++  };
++
++  return (
++    <div className="fixed inset-0 z-50 bg-slate-950 flex flex-col">
++      {/* Header */}
++      <div className="flex items-center justify-between px-5 py-3 bg-slate-900/90 border-b border-slate-800 text-white flex-shrink-0">
++        <div className="flex items-center space-x-2 text-sm font-semibold">
++          <Users className="w-4 h-4 text-teal-400" />
++          <span>{displayName}</span>
++        </div>
++        <span className="text-xs font-medium text-teal-300 flex items-center space-x-1.5">
++          {(status === 'connecting-signal' || status === 'connecting-media') && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
++          <span>{statusLabel[status]}</span>
++        </span>
++      </div>
++
++      {/* Video area */}
++      <div className="flex-1 relative bg-slate-900 overflow-hidden">
++        <video ref={remoteVideoRef} autoPlay playsInline className="w-full h-full object-cover bg-slate-950" />
++
++        {status !== 'in-call' && status !== 'error' && (
++          <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-400 space-y-2">
++            <Loader2 className="w-8 h-8 animate-spin text-teal-500" />
++            <p className="text-sm font-medium">{statusLabel[status]}</p>
++          </div>
++        )}
++
++        {status === 'error' && (
++          <div className="absolute inset-0 flex flex-col items-center justify-center text-center px-8 space-y-2">
++            <p className="text-rose-400 font-bold text-sm">Something went wrong</p>
++            <p className="text-slate-400 text-xs max-w-md">{errorMsg}</p>
++          </div>
++        )}
++
++        {/* Local video PiP */}
++        <div className="absolute bottom-24 right-4 w-32 sm:w-44 aspect-video rounded-xl overflow-hidden border-2 border-slate-700 shadow-lg bg-slate-800">
++          <video ref={localVideoRef} autoPlay playsInline muted className="w-full h-full object-cover scale-x-[-1]" />
++          {!camOn && (
++            <div className="absolute inset-0 flex items-center justify-center bg-slate-800 text-slate-500 text-[10px] font-semibold">
++              Camera off
++            </div>
++          )}
++        </div>
++      </div>
++
++      {/* Controls */}
++      <div className="flex items-center justify-center space-x-4 py-5 bg-slate-900/90 border-t border-slate-800 flex-shrink-0">
++        <button
++          onClick={toggleMic}
++          className={`w-12 h-12 rounded-full flex items-center justify-center transition-colors ${
++            micOn ? 'bg-slate-800 text-white hover:bg-slate-700' : 'bg-rose-600 text-white'
++          }`}
++        >
++          {micOn ? <Mic className="w-5 h-5" /> : <MicOff className="w-5 h-5" />}
++        </button>
++        <button
++          onClick={endCall}
++          className="w-14 h-14 rounded-full bg-rose-600 hover:bg-rose-700 text-white flex items-center justify-center shadow-lg shadow-rose-600/30"
++        >
++          <PhoneOff className="w-6 h-6" />
++        </button>
++        <button
++          onClick={toggleCam}
++          className={`w-12 h-12 rounded-full flex items-center justify-center transition-colors ${
++            camOn ? 'bg-slate-800 text-white hover:bg-slate-700' : 'bg-rose-600 text-white'
++          }`}
++        >
++          {camOn ? <Video className="w-5 h-5" /> : <VideoOff className="w-5 h-5" />}
++        </button>
++      </div>
++    </div>
++  );
++};
+diff --git a/src/components/doctor/QueueOverview.tsx b/src/components/doctor/QueueOverview.tsx
+index bc97a7e..24a40c8 100644
+--- a/src/components/doctor/QueueOverview.tsx
++++ b/src/components/doctor/QueueOverview.tsx
+@@ -1,6 +1,7 @@
+ import React, { useState } from 'react';
+ import { useAppContext } from '../../context/AppContext';
+ import { Appointment, Patient } from '../../types';
++import { VideoConsult } from '../common/VideoConsult';
+ import {
+   Users,
+   Clock,
+@@ -15,14 +16,16 @@ import {
+   Pill,
+   Phone,
+   Search,
+-  ChevronRight
++  ChevronRight,
++  Video
+ } from 'lucide-react';
+ 
+ export const QueueOverview: React.FC = () => {
+-  const { appointments, patients, doctors, getActiveDoctor, updateAppointmentStatus, speak } = useAppContext();
++  const { appointments, patients, doctors, getActiveDoctor, updateAppointmentStatus, fetchWaitInsights, speak } = useAppContext();
+   const doctor = getActiveDoctor();
+ 
+   const [selectedPatientForDrawer, setSelectedPatientForDrawer] = useState<Patient | null>(null);
++  const [activeVideoCall, setActiveVideoCall] = useState<{ roomId: string; withName: string } | null>(null);
+ 
+   if (!doctor) return null;
+ 
+@@ -33,10 +36,24 @@ export const QueueOverview: React.FC = () => {
+     a => a.doctorId === doctor.id && a.date === today && a.status !== 'cancelled'
+   );
+ 
+-  const waitingQueue = doctorTodayApps.filter(a => a.status === 'scheduled');
++  const waitingQueue = doctorTodayApps
++    .filter(a => a.status === 'scheduled')
++    .sort((a, b) => (a.queuePosition || 0) - (b.queuePosition || 0));
+   const inConsultation = doctorTodayApps.filter(a => a.status === 'in-progress');
+   const completedQueue = doctorTodayApps.filter(a => a.status === 'completed');
+ 
++  // Keep each waiting patient's plain-English wait explanation fresh as the queue shifts.
++  const waitingIds = waitingQueue.map(a => a.id).join(',');
++  React.useEffect(() => {
++    if (waitingQueue.length > 0) {
++      fetchWaitInsights(doctor.id, today);
++    }
++    // eslint-disable-next-line react-hooks/exhaustive-deps
++  }, [waitingIds, doctor.id, today]);
++
++  // Ordered queue list for display purposes (waiting first in queue order, then in-progress, then completed)
++  const orderedDisplayList = [...inConsultation, ...waitingQueue, ...completedQueue];
++
+   const handleCallNext = () => {
+     if (waitingQueue.length === 0) {
+       speak('No waiting patients in queue.');
+@@ -144,6 +161,13 @@ export const QueueOverview: React.FC = () => {
+                 </div>
+ 
+                 <div className="flex items-center space-x-2 flex-shrink-0">
++                  <button
++                    onClick={() => setActiveVideoCall({ roomId: app.id, withName: pat.name })}
++                    className="text-xs font-semibold bg-teal-50 hover:bg-teal-100 text-teal-700 px-3.5 py-2 border border-teal-200 rounded-xl transition-colors shadow-xs flex items-center space-x-1.5"
++                  >
++                    <Video className="w-3.5 h-3.5" />
++                    <span>Start Video Consult</span>
++                  </button>
+                   <button
+                     onClick={() => setSelectedPatientForDrawer(pat)}
+                     className="text-xs font-semibold bg-slate-50 hover:bg-slate-100 text-slate-700 px-3.5 py-2 border border-slate-200 rounded-xl transition-colors shadow-xs"
+@@ -172,7 +196,7 @@ export const QueueOverview: React.FC = () => {
+ 
+         {doctorTodayApps.length > 0 ? (
+           <div className="space-y-3">
+-            {doctorTodayApps.map((app, index) => {
++            {orderedDisplayList.map((app, index) => {
+               const pat = patients.find(p => p.id === app.patientId);
+               if (!pat) return null;
+ 
+@@ -206,9 +230,33 @@ export const QueueOverview: React.FC = () => {
+                       </div>
+ 
+                       <p className="text-xs text-slate-500 mt-0.5">
+-                        {pat.age}y {pat.gender} • Type: {app.type} • Est. Wait: ~{app.estimatedWaitMins}m
++                        {pat.age}y {pat.gender} • Type: {app.type}
++                        {app.status === 'scheduled' && (
++                          <>
++                            {' '}• Est. Wait: ~{app.estimatedWaitMins}m
++                            {app.waitPredictionConfidence && (
++                              <span
++                                className={`ml-1.5 text-[9px] font-bold uppercase px-1.5 py-0.5 rounded-full ${
++                                  app.waitPredictionConfidence === 'high'
++                                    ? 'bg-teal-100 text-teal-800'
++                                    : app.waitPredictionConfidence === 'medium'
++                                    ? 'bg-amber-100 text-amber-800'
++                                    : 'bg-slate-100 text-slate-600'
++                                }`}
++                              >
++                                {app.waitPredictionConfidence} confidence
++                              </span>
++                            )}
++                          </>
++                        )}
+                       </p>
+ 
++                      {app.status === 'scheduled' && app.waitPredictionInsight && (
++                        <p className="text-[11px] text-teal-700 mt-1 font-medium italic">
++                          ✨ {app.waitPredictionInsight}
++                        </p>
++                      )}
++
+                       <div className="flex flex-wrap gap-2 text-[11px] text-slate-600 mt-1 font-medium">
+                         <span>Vitals: {pat.vitals.bloodPressure}</span>
+                         <span>•</span>
+@@ -344,6 +392,16 @@ export const QueueOverview: React.FC = () => {
+           </div>
+         </div>
+       )}
++
++      {/* WebRTC Video Consult */}
++      {activeVideoCall && (
++        <VideoConsult
++          roomId={activeVideoCall.roomId}
++          displayName={`Dr. ${doctor.name} with ${activeVideoCall.withName}`}
++          role="doctor"
++          onClose={() => setActiveVideoCall(null)}
++        />
++      )}
+     </div>
+   );
+ };
+diff --git a/src/components/patient/MyAppointments.tsx b/src/components/patient/MyAppointments.tsx
+index 59b74a8..823ff48 100644
+--- a/src/components/patient/MyAppointments.tsx
++++ b/src/components/patient/MyAppointments.tsx
+@@ -2,6 +2,7 @@ import React, { useState } from 'react';
+ import { useAppContext } from '../../context/AppContext';
+ import { Appointment } from '../../types';
+ import { generatePatientSummaryPDF } from '../../utils/pdfGenerator';
++import { VideoConsult } from '../common/VideoConsult';
+ import {
+   Calendar,
+   Clock,
+@@ -13,13 +14,15 @@ import {
+   AlertCircle,
+   ChevronRight,
+   Building2,
+-  Download
++  Download,
++  Video
+ } from 'lucide-react';
+ 
+ export const MyAppointments: React.FC = () => {
+   const { appointments, medicines, doctors, getActivePatient, updateAppointmentStatus, speak } = useAppContext();
+   const patient = getActivePatient();
+   const [statusFilter, setStatusFilter] = useState<string>('all');
++  const [activeVideoCall, setActiveVideoCall] = useState<{ roomId: string; withName: string } | null>(null);
+ 
+   if (!patient) return null;
+ 
+@@ -152,9 +155,24 @@ export const MyAppointments: React.FC = () => {
+                       <span className="text-xs font-bold text-teal-700">
+                         Pos #{app.queuePosition || 1} • ~{app.estimatedWaitMins || 15} MINS WAIT
+                       </span>
++                      {app.waitPredictionInsight && (
++                        <p className="text-[10px] text-slate-500 italic mt-0.5 max-w-[220px] md:text-right">
++                          {app.waitPredictionInsight}
++                        </p>
++                      )}
+                     </div>
+                   )}
+ 
++                  {app.status === 'in-progress' && (
++                    <button
++                      onClick={() => setActiveVideoCall({ roomId: app.id, withName: doc?.name || 'your doctor' })}
++                      className="text-xs font-bold text-white bg-teal-600 hover:bg-teal-700 px-3.5 py-2 rounded-xl transition-all shadow-md shadow-teal-600/20 mb-2 flex items-center space-x-1.5"
++                    >
++                      <Video className="w-3.5 h-3.5" />
++                      <span>Join Video Consult</span>
++                    </button>
++                  )}
++
+                   {app.status === 'scheduled' && (
+                     <button
+                       onClick={() => {
+@@ -178,6 +196,16 @@ export const MyAppointments: React.FC = () => {
+           <p className="text-xs text-slate-500 mt-1">There are no appointments matching the selected category.</p>
+         </div>
+       )}
++
++      {/* WebRTC Video Consult */}
++      {activeVideoCall && (
++        <VideoConsult
++          roomId={activeVideoCall.roomId}
++          displayName={activeVideoCall.withName}
++          role="patient"
++          onClose={() => setActiveVideoCall(null)}
++        />
++      )}
+     </div>
+   );
+ };
+diff --git a/src/context/AppContext.tsx b/src/context/AppContext.tsx
+index d2f6e56..4468996 100644
+--- a/src/context/AppContext.tsx
++++ b/src/context/AppContext.tsx
+@@ -40,6 +40,7 @@ interface AppContextType {
+   switchRole: (role: UserRole, targetId?: string) => void;
+   bookAppointment: (newApp: Omit<Appointment, 'id' | 'status'>) => Promise<Appointment>;
+   updateAppointmentStatus: (id: string, status: Appointment['status'], doctorNotes?: string) => void;
++  fetchWaitInsights: (doctorId: string, date: string) => Promise<void>;
+   toggleMedicationDose: (medId: string, timeOfDay: 'Morning' | 'Afternoon' | 'Evening' | 'PRN') => void;
+   addPrescription: (patientId: string, name: string, dosage: string, frequency: string, timeOfDay: ('Morning' | 'Afternoon' | 'Evening' | 'PRN')[], instructions: string) => void;
+   resolveAlert: (alertId: string, actionNote?: string) => void;
+@@ -273,19 +274,90 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
+     }
+   };
+ 
++  // Priority ranking used to order the live queue (lower = seen sooner)
++  const priorityRank = (p?: Appointment['priority']) => {
++    if (p === 'High Risk') return 0;
++    if (p === 'Urgent') return 1;
++    return 2; // Standard / undefined
++  };
++
++  /**
++   * Recomputes queuePosition, estimatedWaitMins and a confidence label for every
++   * 'scheduled' appointment a doctor has today, using:
++   *  - the doctor's ACTUAL average consultation duration so far today (falls back to
++   *    their historical avgConsultationTimeMins when there isn't enough data yet)
++   *  - remaining time left in any consultation currently in-progress
++   *  - priority (High Risk / Urgent patients are queued ahead of Standard ones)
++   * This replaces the old static "(position + 1) * avgConsultationTimeMins" formula
++   * with one that reacts to how the clinic is actually running today.
++   */
++  const recalcDoctorQueue = (appts: Appointment[], doctorId: string, date: string): Appointment[] => {
++    const doc = doctors.find(d => d.id === doctorId);
++    const fallbackDuration = doc?.avgConsultationTimeMins || 15;
++
++    const todaysForDoctor = appts.filter(a => a.doctorId === doctorId && a.date === date && a.status !== 'cancelled');
++
++    // Actual duration data from consults completed today
++    const completedDurations = todaysForDoctor
++      .filter(a => a.consultationStartedAt && a.consultationEndedAt)
++      .map(a => (new Date(a.consultationEndedAt!).getTime() - new Date(a.consultationStartedAt!).getTime()) / 60000)
++      .filter(mins => mins > 0 && mins < 180);
++
++    const sampleSize = completedDurations.length;
++    const actualAvg = sampleSize > 0
++      ? completedDurations.reduce((sum, m) => sum + m, 0) / sampleSize
++      : fallbackDuration;
++
++    // Blend actual average with the doctor's historical baseline until we have enough samples today
++    const blendedAvg = sampleSize >= 3
++      ? actualAvg
++      : (actualAvg * sampleSize + fallbackDuration * (3 - sampleSize)) / 3;
++
++    const confidence: Appointment['waitPredictionConfidence'] =
++      sampleSize >= 3 ? 'high' : sampleSize >= 1 ? 'medium' : 'low';
++
++    // Time remaining on whoever is currently in the room
++    const inProgress = todaysForDoctor.find(a => a.status === 'in-progress');
++    let leadTimeMins = 0;
++    if (inProgress?.consultationStartedAt) {
++      const elapsed = (Date.now() - new Date(inProgress.consultationStartedAt).getTime()) / 60000;
++      leadTimeMins = Math.max(blendedAvg - elapsed, 2);
++    }
++
++    // Order the waiting queue by priority first, then by original booking order
++    const waiting = todaysForDoctor
++      .filter(a => a.status === 'scheduled')
++      .sort((a, b) => {
++        const rankDiff = priorityRank(a.priority) - priorityRank(b.priority);
++        if (rankDiff !== 0) return rankDiff;
++        return a.id.localeCompare(b.id);
++      });
++
++    const waitById = new Map<string, { queuePosition: number; estimatedWaitMins: number }>();
++    waiting.forEach((a, idx) => {
++      waitById.set(a.id, {
++        queuePosition: idx + 1,
++        estimatedWaitMins: Math.round(leadTimeMins + idx * blendedAvg)
++      });
++    });
++
++    return appts.map(a => {
++      if (a.doctorId !== doctorId || a.date !== date || a.status !== 'scheduled') return a;
++      const w = waitById.get(a.id);
++      if (!w) return a;
++      return { ...a, ...w, waitPredictionConfidence: confidence };
++    });
++  };
++
+   const bookAppointment = async (newApp: Omit<Appointment, 'id' | 'status'>): Promise<Appointment> => {
+-    const doc = doctors.find(d => d.id === newApp.doctorId);
+-    const docQueueCount = appointments.filter(a => a.doctorId === newApp.doctorId && a.date === newApp.date && a.status === 'scheduled').length;
+-    
+     const created: Appointment = {
+       ...newApp,
+       id: `app_${Date.now()}`,
+-      status: 'scheduled',
+-      estimatedWaitMins: (docQueueCount + 1) * (doc?.avgConsultationTimeMins || 15),
+-      queuePosition: docQueueCount + 1
++      status: 'scheduled'
+     };
+ 
+-    setAppointments(prev => [created, ...prev]);
++    const doc = doctors.find(d => d.id === created.doctorId);
++    setAppointments(prev => recalcDoctorQueue([created, ...prev], created.doctorId, created.date));
+     enqueueOfflineAction('BOOK_APPOINTMENT', created);
+ 
+     const isOff = isOffline || simulatedOffline;
+@@ -295,15 +367,67 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
+   };
+ 
+   const updateAppointmentStatus = (id: string, status: Appointment['status'], doctorNotes?: string) => {
+-    setAppointments(prev =>
+-      prev.map(app => (app.id === id ? { ...app, status, ...(doctorNotes ? { doctorNotes } : {}) } : app))
+-    );
++    setAppointments(prev => {
++      const target = prev.find(a => a.id === id);
++      if (!target) return prev;
++
++      const now = new Date().toISOString();
++      const timestampPatch =
++        status === 'in-progress' ? { consultationStartedAt: now } :
++        status === 'completed' ? { consultationEndedAt: now } : {};
++
++      const updated = prev.map(app =>
++        app.id === id ? { ...app, status, ...timestampPatch, ...(doctorNotes ? { doctorNotes } : {}) } : app
++      );
++
++      // Re-run the wait prediction for the rest of this doctor's queue today,
++      // since actual consult durations feed the estimate for everyone still waiting.
++      return recalcDoctorQueue(updated, target.doctorId, target.date);
++    });
+     enqueueOfflineAction('UPDATE_APPOINTMENT_STATUS', { id, status, doctorNotes });
+     const isOff = isOffline || simulatedOffline;
+     showToast(`Appointment status updated to ${status}. ${isOff ? '(Cached Offline)' : ''}`);
+     speak(`Appointment status updated to ${status}.`);
+   };
+ 
++  const fetchWaitInsights = async (doctorId: string, date: string): Promise<void> => {
++    const doc = doctors.find(d => d.id === doctorId);
++    const waiting = appointments
++      .filter(a => a.doctorId === doctorId && a.date === date && a.status === 'scheduled')
++      .sort((a, b) => (a.queuePosition || 0) - (b.queuePosition || 0));
++
++    if (waiting.length === 0) return;
++
++    try {
++      const res = await fetch('/api/ai/predict-wait-time', {
++        method: 'POST',
++        headers: { 'Content-Type': 'application/json' },
++        body: JSON.stringify({
++          doctorName: doc?.name,
++          specialty: doc?.specialty,
++          queue: waiting.map(a => ({
++            appointmentId: a.id,
++            queuePosition: a.queuePosition,
++            priority: a.priority || 'Standard',
++            estimatedWaitMins: a.estimatedWaitMins
++          }))
++        })
++      });
++      if (!res.ok) return;
++      const data = await res.json();
++      const insightById = new Map<string, string>(
++        (data.insights || []).map((i: any) => [i.appointmentId, i.insight])
++      );
++      if (insightById.size === 0) return;
++
++      setAppointments(prev =>
++        prev.map(a => (insightById.has(a.id) ? { ...a, waitPredictionInsight: insightById.get(a.id) } : a))
++      );
++    } catch (err) {
++      console.warn('Wait insight fetch failed (non-fatal):', err);
++    }
++  };
++
+   const toggleMedicationDose = (medId: string, timeOfDay: 'Morning' | 'Afternoon' | 'Evening' | 'PRN') => {
+     setMedicines(prev =>
+       prev.map(med => {
+@@ -502,6 +626,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
+         switchRole,
+         bookAppointment,
+         updateAppointmentStatus,
++        fetchWaitInsights,
+         toggleMedicationDose,
+         addPrescription,
+         resolveAlert,
+diff --git a/src/types.ts b/src/types.ts
+index caa0c0a..c2270df 100644
+--- a/src/types.ts
++++ b/src/types.ts
+@@ -70,6 +70,10 @@ export interface Appointment {
+   prescriptionsIssued?: string[];
+   estimatedWaitMins?: number;
+   queuePosition?: number;
++  consultationStartedAt?: string; // ISO timestamp, set when status -> in-progress
++  consultationEndedAt?: string; // ISO timestamp, set when status -> completed
++  waitPredictionConfidence?: 'low' | 'medium' | 'high';
++  waitPredictionInsight?: string; // short natural-language explanation from the AI model
+ }
+ 
+ export interface Medicine {
