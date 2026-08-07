@@ -15,10 +15,11 @@ import { CaregiverAlerts } from './components/caregiver/Alerts';
 import { AdherenceHistory } from './components/caregiver/AdherenceHistory';
 import { SDLCProcessHub } from './components/sdlc/SDLCProcessHub';
 import { OfflineStatusBanner } from './components/common/OfflineStatusBanner';
+import { NotificationManager } from './components/common/NotificationManager';
 
 const MainAppContent: React.FC = () => {
   const { activeRole, toastMessage } = useAppContext();
-  const [isLoggedIn, setIsLoggedIn] = useState(true);
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [activeTab, setActiveTab] = useState('home');
 
   if (!isLoggedIn) {
@@ -78,6 +79,7 @@ const MainAppContent: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 font-sans selection:bg-teal-500 selection:text-white">
+      <NotificationManager />
       <Nav activeTab={activeTab} setActiveTab={setActiveTab} onLogout={() => setIsLoggedIn(false)} />
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">

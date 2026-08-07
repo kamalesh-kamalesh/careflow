@@ -393,7 +393,13 @@ Since full symptom details have been provided above, please follow the clinical 
         id: `msg_bot_${Date.now()}`,
         sender: 'assistant',
         text: data.response || `Thank you. Based on your symptoms (${symptomDetails}), age (${patientAge}), and temperature (${temperature}°${tempUnit}), here is your clinical assessment.`,
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        bookingData: {
+          step: 'doctor_list',
+          specialty,
+          severity,
+          doctors: matchedDocs
+        }
       };
 
       setMessages(prev => [...prev, botMsg]);
@@ -419,9 +425,15 @@ I'm sorry you're dealing with this discomfort. Let's review what you've shared:
 • Stay hydrated with warm fluids or electrolyte solutions.
 • Monitor your temperature and symptoms every 4 to 6 hours.
 
-${isUrgent ? `\n### 🩺 Professional Medical Consultation
-Given that your reported severity is **${symptomSeverity}** ${isFeverHigh ? 'with high fever' : ''}, it is recommended to consult a healthcare professional (${specialty}) for evaluation.` : ''}`,
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+### 🩺 Recommended Specialists
+Based on your symptoms, consulting a **${specialty}** specialist is recommended if symptoms persist.`,
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        bookingData: {
+          step: 'doctor_list',
+          specialty,
+          severity,
+          doctors: matchedDocs
+        }
       };
       setMessages(prev => [...prev, fallbackMsg]);
     } finally {
@@ -508,13 +520,36 @@ Based on your request, here are top **${specialty}** specialists and available a
       });
 
       const data = await res.json();
+      const { specialty, severity, doctors: matchedDocs } = getDoctorMatchForSymptoms(text);
+
+      const responseText = data.response || data.fallback || 'I received your query. Please consult your physician for advice.';
+      const lowerResp = responseText.toLowerCase();
+      const userMsgCount = newMessages.filter(m => m.sender === 'user').length;
+
+      const isTurn3OrDoctorRequested =
+        isExplicitDoctorBookingRequest ||
+        lowerResp.includes('routine') ||
+        lowerResp.includes('urgent') ||
+        lowerResp.includes('book an appointment') ||
+        lowerResp.includes('appointment feature') ||
+        lowerResp.includes('specialist to consult') ||
+        lowerResp.includes('general physician');
+
       const botMsg: ChatMessage = {
         id: `msg_bot_${Date.now()}`,
         sender: 'assistant',
-        text: data.response || data.fallback || 'I received your query. Please consult your physician for advice.',
+        text: responseText,
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         source: data.source,
-        disclaimer: data.disclaimer
+        disclaimer: data.disclaimer,
+        bookingData: isTurn3OrDoctorRequested
+          ? {
+              step: 'doctor_list',
+              specialty,
+              severity,
+              doctors: matchedDocs
+            }
+          : undefined
       };
 
       setMessages(prev => [...prev, botMsg]);
