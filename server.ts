@@ -17,7 +17,7 @@ async function startServer() {
 
   // Initialize Groq AI Client lazily/safely
   const getGroqClient = () => {
-    const apiKey = process.env.GROQ_API_KEY;
+    const apiKey = process.env.GROQ_API_KEY || process.env.VITE_GROQ_API_KEY;
     if (!apiKey) return null;
     try {
       return new Groq({ apiKey });
@@ -263,22 +263,7 @@ Patient Context: ${JSON.stringify(patientContext || {})}
 Current Turn: ${userTurns}
 `;
 
-      // Try Gemini AI API first (automatically provided by AI Studio environment)
-      const ai = getGeminiClient();
-      if (ai) {
-        try {
-          const geminiResult = await generateGeminiChatResponse(ai, systemInstruction, history, prompt);
-          return res.json({
-            response: geminiResult.text,
-            disclaimer: HEALTH_KNOWLEDGE_BASE.meta.disclaimer,
-            source: `gemini-api (${geminiResult.modelName})`
-          });
-        } catch (geminiErr: any) {
-          console.warn('Gemini chat error, trying Groq fallback:', geminiErr?.message || geminiErr);
-        }
-      }
-
-      // Try Groq API as secondary option
+      // Try Groq API first with high-speed LLaMA models
       const groq = getGroqClient();
       if (groq) {
         try {
@@ -289,7 +274,22 @@ Current Turn: ${userTurns}
             source: `groq-api (${groqResult.modelName})`
           });
         } catch (groqErr: any) {
-          console.warn('Groq chat error:', groqErr?.message || groqErr);
+          console.warn('Groq chat error, trying Gemini fallback:', groqErr?.message || groqErr);
+        }
+      }
+
+      // Try Gemini AI API as secondary option
+      const ai = getGeminiClient();
+      if (ai) {
+        try {
+          const geminiResult = await generateGeminiChatResponse(ai, systemInstruction, history, prompt);
+          return res.json({
+            response: geminiResult.text,
+            disclaimer: HEALTH_KNOWLEDGE_BASE.meta.disclaimer,
+            source: `gemini-api (${geminiResult.modelName})`
+          });
+        } catch (geminiErr: any) {
+          console.warn('Gemini chat error:', geminiErr?.message || geminiErr);
         }
       }
 
