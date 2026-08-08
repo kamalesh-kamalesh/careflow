@@ -216,48 +216,18 @@ Patient Context: ${JSON.stringify(patientContext || {})}
 Current Turn: ${userTurns}
 `;
 
-      // 1. Try Groq API first
+      // Execute via Groq API exclusively for chat
       const groq = getGroqClient();
-      if (groq) {
-        try {
-          const groqResult = await generateGroqChatResponse(groq, systemInstruction, history, prompt);
-          return res.json({
-            response: groqResult.text,
-            disclaimer: HEALTH_KNOWLEDGE_BASE.meta.disclaimer,
-            source: `groq-api (${groqResult.modelName})`
-          });
-        } catch (groqErr: any) {
-          console.warn('Groq API call failed, falling back to Gemini / Clinical Protocol:', groqErr?.message || groqErr);
-        }
+      if (!groq) {
+        throw new Error('Groq API client is not configured');
       }
 
-      // 2. Try Gemini API as secondary
-      const ai = getGeminiClient();
-      if (ai) {
-        try {
-          const contents = history && Array.isArray(history) && history.length > 0
-            ? [...history.map((h: any) => `${h.role === 'user' || h.role === 'Patient' || h.sender === 'user' ? 'Patient' : 'CareFlow AI'}: ${h.text}`), `Patient: ${prompt}`].join('\n\n')
-            : prompt;
-
-          const aiResponse = await generateContentWithFallback(ai, {
-            contents,
-            config: {
-              systemInstruction,
-              temperature: 0.7,
-            },
-          });
-
-          const responseText = aiResponse.text || 'Thank you for asking. Please remember to consult your healthcare provider for medical advice.';
-
-          return res.json({
-            response: responseText,
-            disclaimer: HEALTH_KNOWLEDGE_BASE.meta.disclaimer,
-            source: 'gemini-model-trained'
-          });
-        } catch (geminiErr: any) {
-          console.warn('Gemini API call failed:', geminiErr?.message || geminiErr);
-        }
-      }
+      const groqResult = await generateGroqChatResponse(groq, systemInstruction, history, prompt);
+      return res.json({
+        response: groqResult.text,
+        disclaimer: HEALTH_KNOWLEDGE_BASE.meta.disclaimer,
+        source: `groq-api (${groqResult.modelName})`
+      });
     } catch (error: any) {
       console.warn('AI Chat Error / High Demand Fallback Triggered:', error?.message || error);
       const historyList = req.body?.history;
@@ -303,8 +273,9 @@ Would you like me to help you book an appointment with one of them?`,
         return res.status(400).json({ error: 'Provide reportText or imageBase64' });
       }
 
+      const groq = getGroqClient();
       const ai = getGeminiClient();
-      if (!ai) {
+      if (!ai && !groq) {
         return res.json({
           summary: 'Body is a bit weak (low iron) + something is inflamed somewhere (high ESR) + slightly high uric acid.',
           keyFindings: [

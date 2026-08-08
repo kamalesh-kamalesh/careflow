@@ -112,7 +112,7 @@ export const Nav: React.FC<NavProps> = ({ activeTab, setActiveTab, onLogout }) =
                 <div className="flex items-center space-x-2">
                   <span className="font-extrabold text-lg sm:text-xl text-slate-900 tracking-tight">CareFlow <span className="text-teal-600 font-black">AI</span></span>
                   <span className="text-[10px] font-mono font-semibold tracking-wider bg-slate-100 text-slate-700 border border-slate-200 px-2 py-0.5 rounded-full uppercase">
-                    SYS-0.8.3
+                    SYS-0.8.5
                   </span>
                 </div>
                 <p className="text-[11px] font-medium text-slate-500 hidden sm:block tracking-wide">Clinical Telemetry & Health Platform</p>
