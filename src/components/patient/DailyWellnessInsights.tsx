@@ -318,39 +318,39 @@ export const DailyWellnessInsights: React.FC<DailyWellnessInsightsProps> = ({
       {/* Header & Streak Banner */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-100">
         <div className="flex items-center space-x-3">
-          <div className="w-10 h-10 bg-amber-500/10 text-amber-600 rounded-xl flex items-center justify-center font-bold border border-amber-500/20 shadow-xs">
-            <Sparkles className="w-5 h-5 text-amber-500 animate-pulse" />
+          <div className="w-11 h-11 bg-amber-500/10 text-amber-600 rounded-xl flex items-center justify-center font-bold border border-amber-500/20 shadow-xs">
+            <Sparkles className="w-6 h-6 text-amber-500 animate-pulse" />
           </div>
           <div>
             <div className="flex items-center space-x-2">
-              <h2 className="text-lg font-extrabold text-slate-900 tracking-tight">Daily Wellness Insights</h2>
-              <span className="bg-teal-50 text-teal-700 text-[10px] font-bold px-2 py-0.5 rounded-full border border-teal-200/60 uppercase">
-                AI Personal Protocol
+              <h2 className="text-xl font-black text-slate-900 tracking-tight">Daily Wellness Insights</h2>
+              <span className="bg-teal-50 text-teal-800 text-xs font-extrabold px-2.5 py-0.5 rounded-full border border-teal-200 uppercase">
+                AI Protocol
               </span>
             </div>
-            <p className="text-xs text-slate-500 font-medium mt-0.5">
-              Personalized health guidance based on your profile, chronic conditions ({patient.conditions.join(', ')}), and {medicines.length} prescription(s).
+            <p className="text-xs sm:text-sm text-slate-600 font-medium mt-0.5">
+              Personalized health guidance based on your profile, conditions ({patient.conditions.join(', ')}), and {medicines.length} prescription(s).
             </p>
           </div>
         </div>
 
         <div className="flex items-center space-x-3 self-start sm:self-auto">
           {/* Daily Streak Badge */}
-          <div className="bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200/80 px-3 py-1.5 rounded-xl flex items-center space-x-2 shadow-2xs">
-            <Flame className="w-4 h-4 text-orange-500 fill-orange-500 animate-bounce" />
+          <div className="bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200 px-3.5 py-2 rounded-xl flex items-center space-x-2 shadow-2xs">
+            <Flame className="w-5 h-5 text-orange-500 fill-orange-500 animate-bounce" />
             <div>
-              <span className="text-[10px] font-bold text-amber-900 uppercase block leading-none">Daily Streak</span>
-              <span className="text-xs font-black text-amber-700 leading-tight">{streakCount} Days Active</span>
+              <span className="text-[10px] sm:text-xs font-bold text-amber-900 uppercase block leading-none">Daily Streak</span>
+              <span className="text-xs sm:text-sm font-black text-amber-700 leading-tight">{streakCount} Days Active</span>
             </div>
           </div>
 
           <button
             onClick={handleRefresh}
             disabled={isRefreshing}
-            className="p-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl transition-all border border-slate-200 flex items-center justify-center"
+            className="p-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl transition-all border border-slate-200 flex items-center justify-center min-h-[40px] cursor-pointer"
             title="Refresh Insights"
           >
-            <RefreshCw className={`w-4 h-4 text-slate-600 ${isRefreshing ? 'animate-spin' : ''}`} />
+            <RefreshCw className={`w-4 h-4 text-slate-700 ${isRefreshing ? 'animate-spin' : ''}`} />
           </button>
         </div>
       </div>
@@ -370,13 +370,13 @@ export const DailyWellnessInsights: React.FC<DailyWellnessInsightsProps> = ({
             <button
               key={tab.id}
               onClick={() => setSelectedCategory(tab.id as any)}
-              className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all ${
+              className={`flex items-center space-x-1.5 px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold whitespace-nowrap transition-all min-h-[40px] cursor-pointer ${
                 isActive
                   ? 'bg-slate-900 text-white shadow-xs'
-                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200/80 border border-slate-200/60'
+                  : 'bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200'
               }`}
             >
-              <Icon className={`w-3.5 h-3.5 ${isActive ? 'text-teal-400' : 'text-slate-500'}`} />
+              <Icon className={`w-4 h-4 ${isActive ? 'text-teal-400' : 'text-slate-500'}`} />
               <span>{tab.label}</span>
             </button>
           );

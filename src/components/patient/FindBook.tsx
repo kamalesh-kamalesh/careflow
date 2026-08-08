@@ -154,13 +154,13 @@ export const FindBook: React.FC = () => {
       )}
 
       {/* Search Header */}
-      <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs space-y-4">
+      <div className="bg-white border border-slate-200 rounded-2xl p-5 sm:p-6 shadow-xs space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-xl font-bold tracking-tight text-slate-900">
+            <h1 className="text-xl sm:text-2xl font-extrabold tracking-tight text-slate-900">
               {activeTab === 'doctors' ? 'Find & Book Specialist Doctors' : 'Erode Hospitals & Emergency Map Directory'}
             </h1>
-            <p className="text-xs text-slate-500 mt-0.5">
+            <p className="text-xs sm:text-sm text-slate-600 mt-1 font-medium">
               {activeTab === 'doctors'
                 ? 'Search 49+ qualified specialist healthcare providers across Erode region with real-time queue visibility.'
                 : 'Browse 70+ top hospitals, multi-specialty centers, emergency trauma units & dialysis centers across Erode.'}
@@ -171,30 +171,30 @@ export const FindBook: React.FC = () => {
           <div className="flex items-center space-x-1.5 bg-slate-100 p-1.5 rounded-xl border border-slate-200">
             <button
               onClick={() => setActiveTab('doctors')}
-              className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center space-x-1.5 ${
-                activeTab === 'doctors' ? 'bg-slate-900 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
+              className={`px-4 py-2.5 rounded-xl text-xs sm:text-sm font-extrabold transition-all flex items-center space-x-2 min-h-[40px] cursor-pointer ${
+                activeTab === 'doctors' ? 'bg-slate-900 text-white shadow-xs' : 'text-slate-700 hover:text-slate-900'
               }`}
             >
-              <Stethoscope className="w-3.5 h-3.5" />
+              <Stethoscope className="w-4 h-4" />
               <span>Specialist Doctors ({doctors.length})</span>
             </button>
             <button
               onClick={() => setActiveTab('hospitals')}
-              className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center space-x-1.5 ${
-                activeTab === 'hospitals' ? 'bg-slate-900 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
+              className={`px-4 py-2.5 rounded-xl text-xs sm:text-sm font-extrabold transition-all flex items-center space-x-2 min-h-[40px] cursor-pointer ${
+                activeTab === 'hospitals' ? 'bg-slate-900 text-white shadow-xs' : 'text-slate-700 hover:text-slate-900'
               }`}
             >
-              <HospitalIcon className="w-3.5 h-3.5" />
+              <HospitalIcon className="w-4 h-4" />
               <span>Hospitals Directory ({ALL_HOSPITALS.length})</span>
             </button>
           </div>
         </div>
 
-        <div className="flex flex-col md:flex-row gap-3 pt-2 border-t border-slate-100">
+        <div className="flex flex-col md:flex-row gap-3 pt-3 border-t border-slate-100">
           {/* Location District Selector */}
           <div className="flex items-center space-x-2">
-            <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider hidden sm:flex items-center gap-1">
-              <MapPin className="w-3.5 h-3.5 text-teal-600" /> Location:
+            <span className="text-xs font-bold text-slate-600 uppercase tracking-wider hidden sm:flex items-center gap-1">
+              <MapPin className="w-4 h-4 text-teal-600" /> Location:
             </span>
             <select
               value={districtFilter}
@@ -202,7 +202,7 @@ export const FindBook: React.FC = () => {
                 setDistrictFilter(e.target.value);
                 if (e.target.value !== 'All') setSelectedDistrict(e.target.value);
               }}
-              className="bg-teal-50 border border-teal-200 text-teal-950 font-bold px-3 py-2.5 text-xs rounded-xl focus:outline-none focus:border-teal-600 shadow-2xs cursor-pointer"
+              className="bg-teal-50 border border-teal-200 text-teal-950 font-bold px-3.5 py-2.5 text-xs sm:text-sm rounded-xl focus:outline-none focus:border-teal-600 shadow-2xs cursor-pointer min-h-[44px]"
             >
               <option value="All">All Districts ({SUPPORTED_DISTRICTS.length})</option>
               {SUPPORTED_DISTRICTS.map(d => (

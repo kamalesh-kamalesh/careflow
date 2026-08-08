@@ -94,18 +94,18 @@ export const PatientHome: React.FC<PatientHomeProps> = ({ setActiveTab }) => {
   return (
     <div className="space-y-6 pb-12">
       {/* Welcome Banner */}
-      <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-teal-950 border border-slate-800 p-6 sm:p-8 text-white rounded-2xl shadow-xl relative overflow-hidden">
+      <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-teal-950 border border-slate-800 p-6 sm:p-8 text-white rounded-3xl shadow-xl relative overflow-hidden">
         <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
           <div>
-            <div className="flex items-center space-x-2 text-teal-400 text-xs font-semibold mb-2 tracking-wide uppercase">
+            <div className="flex items-center space-x-2 text-teal-400 text-xs sm:text-sm font-bold mb-2 tracking-wide uppercase">
               <span>Patient Telemetry</span>
               <span>•</span>
-              <span className="font-mono bg-teal-500/10 px-2 py-0.5 rounded text-teal-300 border border-teal-500/20">ID: {patient.id.toUpperCase()}</span>
+              <span className="font-mono bg-teal-500/20 px-2.5 py-0.5 rounded text-teal-300 border border-teal-500/30">ID: {patient.id.toUpperCase()}</span>
             </div>
-            <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight">
+            <h1 className="text-2xl sm:text-4xl font-black tracking-tight text-white">
               Welcome back, {patient.name}
             </h1>
-            <p className="text-slate-300 text-xs sm:text-sm mt-1.5 max-w-xl leading-relaxed">
+            <p className="text-slate-300 text-sm sm:text-base mt-2 max-w-xl leading-relaxed font-medium">
               Care Protocol Active. You have{' '}
               <strong className="text-teal-400 font-bold">{todayAppointments.length} appointment(s)</strong> scheduled today.
             </p>
@@ -122,7 +122,7 @@ export const PatientHome: React.FC<PatientHomeProps> = ({ setActiveTab }) => {
                 );
                 speak('Generating and downloading medical PDF summary report.');
               }}
-              className="bg-teal-500/20 hover:bg-teal-500/30 text-teal-200 border border-teal-500/30 text-xs font-bold px-4 py-2.5 rounded-xl transition-all flex items-center space-x-2 shadow-sm"
+              className="bg-teal-500/20 hover:bg-teal-500/30 text-teal-200 border border-teal-500/30 text-sm font-bold px-4 py-3 rounded-xl transition-all flex items-center space-x-2 shadow-sm min-h-[44px] cursor-pointer"
             >
               <Download className="w-4 h-4 text-teal-400" />
               <span>Download PDF Summary</span>
@@ -132,7 +132,7 @@ export const PatientHome: React.FC<PatientHomeProps> = ({ setActiveTab }) => {
                 setActiveTab('ai-assistant');
                 speak('Opening AI Care Assistant');
               }}
-              className="bg-white text-slate-900 border border-slate-200 text-xs font-bold px-4 py-2.5 rounded-xl hover:bg-slate-100 transition-all flex items-center space-x-2 shadow-sm"
+              className="bg-white text-slate-900 border border-slate-200 text-sm font-bold px-4 py-3 rounded-xl hover:bg-slate-100 transition-all flex items-center space-x-2 shadow-sm min-h-[44px] cursor-pointer"
             >
               <MessageSquareHeart className="w-4 h-4 text-teal-600" />
               <span>Ask Care AI</span>
@@ -142,7 +142,7 @@ export const PatientHome: React.FC<PatientHomeProps> = ({ setActiveTab }) => {
                 setActiveTab('find-book');
                 speak('Opening Doctor Booking');
               }}
-              className="bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs px-4 py-2.5 rounded-xl tracking-wide transition-all flex items-center space-x-2 shadow-md shadow-teal-600/30"
+              className="bg-teal-600 hover:bg-teal-700 text-white font-bold text-sm px-4 py-3 rounded-xl tracking-wide transition-all flex items-center space-x-2 shadow-md shadow-teal-600/30 min-h-[44px] cursor-pointer"
             >
               <Search className="w-4 h-4" />
               <span>Book Doctor</span>
@@ -151,15 +151,15 @@ export const PatientHome: React.FC<PatientHomeProps> = ({ setActiveTab }) => {
         </div>
 
         {/* Patient quick badge row */}
-        <div className="mt-6 pt-4 border-t border-slate-800/80 flex flex-wrap gap-2 text-xs">
-          <span className="bg-slate-800/80 px-3 py-1 rounded-lg border border-slate-700/60 text-slate-200">
-            Blood Group: <strong className="text-teal-400">{patient.bloodType}</strong>
+        <div className="mt-6 pt-4 border-t border-slate-800/80 flex flex-wrap gap-2.5 text-xs sm:text-sm">
+          <span className="bg-slate-800/80 px-3.5 py-1.5 rounded-xl border border-slate-700/60 text-slate-200">
+            Blood Group: <strong className="text-teal-400 font-bold">{patient.bloodType}</strong>
           </span>
-          <span className="bg-slate-800/80 px-3 py-1 rounded-lg border border-slate-700/60 text-slate-200">
-            Conditions: <strong className="text-white">{patient.conditions.join(', ')}</strong>
+          <span className="bg-slate-800/80 px-3.5 py-1.5 rounded-xl border border-slate-700/60 text-slate-200">
+            Conditions: <strong className="text-white font-bold">{patient.conditions.join(', ')}</strong>
           </span>
-          <span className="bg-rose-500/10 px-3 py-1 rounded-lg border border-rose-500/20 text-rose-300 font-medium">
-            Allergies: <strong>{patient.allergies.join(', ')}</strong>
+          <span className="bg-rose-500/20 px-3.5 py-1.5 rounded-xl border border-rose-500/30 text-rose-200 font-medium">
+            Allergies: <strong className="font-bold">{patient.allergies.join(', ')}</strong>
           </span>
         </div>
       </div>

@@ -46,10 +46,10 @@ export const MyAppointments: React.FC = () => {
   return (
     <div className="space-y-6 pb-12">
       {/* Header & Filter */}
-      <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="bg-white border border-slate-200 rounded-2xl p-5 sm:p-6 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-xl font-bold tracking-tight text-slate-900">My Appointments Schedule</h1>
-          <p className="text-xs text-slate-500 mt-0.5">Track upcoming appointments, wait times, & clinical consultation history.</p>
+          <h1 className="text-xl sm:text-2xl font-extrabold tracking-tight text-slate-900">My Appointments Schedule</h1>
+          <p className="text-xs sm:text-sm text-slate-600 mt-1 font-medium">Track upcoming appointments, wait times, & clinical consultation history.</p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
@@ -63,9 +63,9 @@ export const MyAppointments: React.FC = () => {
               );
               speak('Downloading appointment and medical summary PDF');
             }}
-            className="px-3.5 py-1.5 rounded-xl text-xs font-bold bg-teal-600 hover:bg-teal-700 text-white shadow-xs transition-all flex items-center space-x-1.5"
+            className="px-4 py-2.5 rounded-xl text-xs sm:text-sm font-extrabold bg-teal-600 hover:bg-teal-700 text-white shadow-xs transition-all flex items-center space-x-2 min-h-[44px] cursor-pointer"
           >
-            <Download className="w-3.5 h-3.5" />
+            <Download className="w-4 h-4" />
             <span>Export Summary PDF</span>
           </button>
           {['all', 'scheduled', 'completed', 'cancelled'].map(st => (
@@ -75,10 +75,10 @@ export const MyAppointments: React.FC = () => {
                 setStatusFilter(st);
                 speak(`Filtering appointments by ${st}`);
               }}
-              className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold uppercase tracking-wide transition-all ${
+              className={`px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-bold uppercase tracking-wide transition-all min-h-[44px] cursor-pointer ${
                 statusFilter === st
                   ? 'bg-slate-900 text-white shadow-sm'
-                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                  : 'bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200'
               }`}
             >
               {st}

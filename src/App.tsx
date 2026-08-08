@@ -82,14 +82,14 @@ const MainAppContent: React.FC = () => {
       <NotificationManager />
       <Nav activeTab={activeTab} setActiveTab={setActiveTab} onLogout={() => setIsLoggedIn(false)} />
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <main className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-8 pb-24 sm:pb-12">
         <OfflineStatusBanner />
         {renderActiveView()}
       </main>
 
       {/* Global Toast Notification */}
       {toastMessage && (
-        <div className="fixed bottom-5 right-5 z-50 bg-slate-900 text-white px-5 py-3 rounded-2xl text-xs font-semibold tracking-wide flex items-center space-x-3 shadow-xl border border-slate-800">
+        <div className="fixed bottom-20 sm:bottom-5 right-4 sm:right-5 z-50 bg-slate-900 text-white px-5 py-3 rounded-2xl text-xs sm:text-sm font-semibold tracking-wide flex items-center space-x-3 shadow-xl border border-slate-800">
           <span className="w-2 h-2 bg-teal-400 rounded-full animate-pulse"></span>
           <span>{toastMessage}</span>
         </div>

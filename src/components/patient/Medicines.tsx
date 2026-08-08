@@ -44,10 +44,10 @@ export const Medicines: React.FC = () => {
   return (
     <div className="space-y-6 pb-12">
       {/* Header */}
-      <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="bg-white border border-slate-200 rounded-2xl p-5 sm:p-6 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-xl font-bold tracking-tight text-slate-900">Medication & Dosage Tracker</h1>
-          <p className="text-xs text-slate-500 mt-0.5">
+          <h1 className="text-xl sm:text-2xl font-extrabold tracking-tight text-slate-900">Medication & Dosage Tracker</h1>
+          <p className="text-xs sm:text-sm text-slate-600 mt-1 font-medium">
             Log daily doses, track 7-day compliance history, & request prescription refills.
           </p>
         </div>
@@ -63,14 +63,14 @@ export const Medicines: React.FC = () => {
               );
               speak('Downloading medication and appointment summary PDF');
             }}
-            className="px-3.5 py-2.5 rounded-xl text-xs font-bold bg-teal-600 hover:bg-teal-700 text-white shadow-xs transition-all flex items-center space-x-1.5"
+            className="px-4 py-2.5 rounded-xl text-xs sm:text-sm font-extrabold bg-teal-600 hover:bg-teal-700 text-white shadow-xs transition-all flex items-center space-x-2 min-h-[44px] cursor-pointer"
           >
             <Download className="w-4 h-4" />
             <span>Export Summary PDF</span>
           </button>
           <div className="bg-slate-900 text-white border border-slate-800 rounded-xl px-4 py-2.5 text-center flex-shrink-0 shadow-xs">
-            <span className="text-[10px] uppercase font-semibold text-teal-400 block tracking-wider">Active Prescriptions</span>
-            <span className="text-xl font-extrabold">{patientMeds.length} MEDS</span>
+            <span className="text-[10px] sm:text-xs uppercase font-bold text-teal-400 block tracking-wider">Active Prescriptions</span>
+            <span className="text-xl sm:text-2xl font-black">{patientMeds.length} MEDS</span>
           </div>
         </div>
       </div>

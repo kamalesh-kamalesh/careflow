@@ -36,7 +36,13 @@ import {
   AlertTriangle,
   History,
   Trash2,
-  X
+  X,
+  Plus,
+  Mic,
+  MicOff,
+  AudioWaveform,
+  Paperclip,
+  ArrowUp
 } from 'lucide-react';
 
 interface AICareAssistantProps {
@@ -136,6 +142,39 @@ I can help you analyze your symptoms, find top specialists in Erode, and **book 
   };
   const [inputPrompt, setInputPrompt] = useState('');
   const [loadingChat, setLoadingChat] = useState(false);
+  const [isListening, setIsListening] = useState(false);
+  const [showAttachMenu, setShowAttachMenu] = useState(false);
+
+  const toggleListening = () => {
+    if (isListening) {
+      setIsListening(false);
+      return;
+    }
+    if (!('webkitSpeechRecognition' in window || 'SpeechRecognition' in window)) {
+      speak('Speech recognition is not supported in this browser. Please type your prompt.');
+      return;
+    }
+    try {
+      const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+      const recognition = new SpeechRecognition();
+      recognition.continuous = false;
+      recognition.interimResults = false;
+      recognition.lang = 'en-US';
+      recognition.onstart = () => setIsListening(true);
+      recognition.onresult = (event: any) => {
+        const transcript = event.results[0][0].transcript;
+        setInputPrompt(prev => (prev ? prev + ' ' + transcript : transcript));
+        setIsListening(false);
+        speak(`Recorded query: ${transcript}`);
+      };
+      recognition.onerror = () => setIsListening(false);
+      recognition.onend = () => setIsListening(false);
+      recognition.start();
+    } catch (e) {
+      console.error('Speech recognition error:', e);
+      setIsListening(false);
+    }
+  };
 
   // Structured Symptom Assessment Modal state
   const [showSymptomModal, setShowSymptomModal] = useState(false);
@@ -827,306 +866,458 @@ Patient: Jane Doe | Age: 45 | Date: 2026-06-10
       </div>
 
       {activeSubTab === 'chat' ? (
-        <div className="bg-white border border-slate-200 rounded-2xl shadow-xs flex flex-col h-[620px] overflow-hidden">
+        <div className="bg-white border border-slate-200 rounded-2xl shadow-sm flex flex-col h-[650px] overflow-hidden relative">
           {/* Chat History Status Header */}
-          <div className="px-4 py-2.5 bg-slate-50 border-b border-slate-200 flex items-center justify-between text-xs">
-            <div className="flex items-center space-x-2 text-slate-600 font-medium">
-              <History className="w-4 h-4 text-teal-600" />
-              <span>Session History</span>
-              <span className="bg-teal-100 text-teal-800 text-[10px] font-bold px-2 py-0.5 rounded-full border border-teal-200 flex items-center space-x-1">
+          <div className="px-4 sm:px-6 py-3 bg-slate-50 border-b border-slate-200 flex items-center justify-between text-xs text-slate-600 shrink-0">
+            <div className="flex items-center space-x-2.5 font-medium">
+              <Sparkles className="w-4 h-4 text-teal-600" />
+              <span className="font-bold text-slate-900 hidden sm:inline">CareFlow AI Assistant</span>
+              <span className="bg-teal-50 text-teal-800 text-[11px] font-bold px-2.5 py-0.5 rounded-full border border-teal-200/80 flex items-center space-x-1">
                 <CheckCircle2 className="w-3 h-3 text-teal-600" />
-                <span>Saved locally ({messages.length} {messages.length === 1 ? 'message' : 'messages'})</span>
+                <span>Saved locally ({messages.length})</span>
               </span>
             </div>
             <div className="flex items-center space-x-2">
               <button
+                type="button"
+                onClick={() => setShowSymptomModal(true)}
+                className="text-teal-800 bg-teal-50 hover:bg-teal-100 border border-teal-200 px-3 py-1.5 rounded-xl font-bold text-xs transition-all flex items-center space-x-1.5 cursor-pointer"
+              >
+                <ClipboardList className="w-3.5 h-3.5 text-teal-700" />
+                <span className="hidden sm:inline">Structured Assessment</span>
+                <span className="sm:hidden">Assessment</span>
+              </button>
+
+              <button
+                type="button"
                 onClick={handleExportCSV}
-                className="text-slate-700 hover:text-teal-700 font-semibold flex items-center space-x-1 text-[11px] transition-colors cursor-pointer bg-white px-2.5 py-1 rounded-lg border border-slate-200 shadow-2xs hover:border-teal-300"
-                title="Export symptom analysis & chat history to CSV for long-term health tracking"
+                className="text-slate-700 hover:text-slate-900 font-semibold flex items-center space-x-1 text-xs transition-colors cursor-pointer bg-white px-3 py-1.5 rounded-xl border border-slate-200 hover:border-slate-300 shadow-2xs"
+                title="Export chat history to CSV"
               >
                 <Download className="w-3.5 h-3.5 text-teal-600" />
-                <span>Export CSV</span>
+                <span className="hidden sm:inline">Export CSV</span>
               </button>
+
               {messages.length > 1 && (
                 <button
+                  type="button"
                   onClick={handleClearHistory}
-                  className="text-slate-500 hover:text-red-600 font-semibold flex items-center space-x-1 text-[11px] transition-colors cursor-pointer bg-white px-2.5 py-1 rounded-lg border border-slate-200 shadow-2xs hover:border-red-300"
-                  title="Clear session history from local storage"
+                  className="text-slate-500 hover:text-rose-600 font-semibold flex items-center space-x-1 text-xs transition-colors cursor-pointer bg-white px-2.5 py-1.5 rounded-xl border border-slate-200 hover:border-rose-200 shadow-2xs"
+                  title="Clear history"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
-                  <span>Clear History</span>
                 </button>
               )}
             </div>
           </div>
 
-          {/* Messages Area */}
-          <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4">
-            {messages.map(msg => {
-              const isUser = msg.sender === 'user';
-              return (
-                <div
-                  key={msg.id}
-                  className={`flex items-start space-x-3 ${isUser ? 'flex-row-reverse space-x-reverse' : ''}`}
-                >
-                  <div
-                    className={`w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 text-white font-bold text-xs shadow-xs ${
-                      isUser ? 'bg-slate-900' : 'bg-teal-600'
-                    }`}
+          {/* Main Content Area */}
+          <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6 flex flex-col">
+            {messages.length <= 1 ? (
+              /* Centered Greeting & Pill Input Bar */
+              <div className="my-auto py-6 flex flex-col items-center justify-center text-center space-y-6 max-w-2xl mx-auto w-full">
+                <h2 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900">
+                  What's on the agenda today?
+                </h2>
+                <p className="text-xs sm:text-sm text-slate-500 max-w-md font-medium">
+                  Ask medical questions, check symptoms, book doctor appointments, or manage your health records.
+                </p>
+
+                {/* Centered Pill Search / Chat Bar */}
+                <div className="w-full relative">
+                  <form
+                    onSubmit={e => {
+                      e.preventDefault();
+                      handleSendMessage();
+                    }}
+                    className="bg-slate-100 hover:bg-slate-200/70 transition-all border border-slate-300 focus-within:border-teal-600 focus-within:bg-white focus-within:ring-2 focus-within:ring-teal-500/20 rounded-full px-3 sm:px-4 py-2 flex items-center gap-2 shadow-sm"
                   >
-                    {isUser ? <User className="w-4 h-4" /> : <Bot className="w-4 h-4" />}
-                  </div>
-
-                  <div className={`max-w-[85%] sm:max-w-[75%] space-y-1`}>
-                    <div
-                      className={`p-4 rounded-2xl text-xs sm:text-sm leading-relaxed ${
-                        isUser
-                          ? 'bg-slate-900 text-white'
-                          : 'bg-slate-50 text-slate-800 border border-slate-100'
-                      }`}
+                    {/* Attachment + Button */}
+                    <button
+                      type="button"
+                      onClick={() => setShowAttachMenu(!showAttachMenu)}
+                      className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-white hover:bg-slate-200 text-slate-700 flex items-center justify-center border border-slate-200 transition-all shrink-0 cursor-pointer shadow-2xs"
+                      title="Add action or attachment"
                     >
-                      {isUser ? (
-                        <p className="whitespace-pre-line">{msg.text}</p>
-                      ) : (
-                        <div className="space-y-3">
-                          <div className="markdown-body space-y-2 [&_h2]:text-sm [&_h2]:font-bold [&_h2]:text-slate-900 [&_h2]:mt-2 [&_h2]:mb-1 [&_h3]:text-xs [&_h3]:font-bold [&_h3]:text-slate-900 [&_h3]:mt-2 [&_h3]:mb-1 [&_ul]:list-disc [&_ul]:pl-4 [&_ul]:space-y-1 [&_ol]:list-decimal [&_ol]:pl-4 [&_ol]:space-y-1 [&_p]:leading-relaxed [&_strong]:font-semibold [&_hr]:my-2 [&_hr]:border-slate-200">
-                            <Markdown>{msg.text}</Markdown>
-                          </div>
+                      <Plus className="w-5 h-5 text-slate-700" />
+                    </button>
 
-                          {/* Interactive Doctor Cards inside Chat */}
-                          {msg.bookingData?.step === 'doctor_list' && msg.bookingData.doctors && (
-                            <div className="mt-3 space-y-3 pt-2 border-t border-slate-200">
-                              <p className="text-xs font-bold text-slate-900 flex items-center space-x-1.5">
-                                <Stethoscope className="w-4 h-4 text-teal-600" />
-                                <span>Recommended Specialists for {msg.bookingData.specialty}:</span>
-                              </p>
+                    {/* Popover Attachment Menu */}
+                    {showAttachMenu && (
+                      <div className="absolute left-0 bottom-16 z-50 bg-white border border-slate-200 rounded-2xl p-2 shadow-xl w-64 text-left space-y-1">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setShowAttachMenu(false);
+                            setShowSymptomModal(true);
+                          }}
+                          className="w-full text-left px-3 py-2 text-xs font-bold text-slate-800 hover:bg-slate-100 rounded-xl flex items-center space-x-2 transition-colors"
+                        >
+                          <ClipboardList className="w-4 h-4 text-teal-600" />
+                          <span>Structured Symptom Assessment</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setShowAttachMenu(false);
+                            setActiveSubTab('report');
+                          }}
+                          className="w-full text-left px-3 py-2 text-xs font-bold text-slate-800 hover:bg-slate-100 rounded-xl flex items-center space-x-2 transition-colors"
+                        >
+                          <Upload className="w-4 h-4 text-teal-600" />
+                          <span>Upload Medical Report</span>
+                        </button>
+                        {setActiveTab && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setShowAttachMenu(false);
+                              setActiveTab('find-book');
+                            }}
+                            className="w-full text-left px-3 py-2 text-xs font-bold text-slate-800 hover:bg-slate-100 rounded-xl flex items-center space-x-2 transition-colors"
+                          >
+                            <Stethoscope className="w-4 h-4 text-teal-600" />
+                            <span>Book Doctor Specialist</span>
+                          </button>
+                        )}
+                      </div>
+                    )}
 
-                              <div className="grid grid-cols-1 gap-3">
-                                {msg.bookingData.doctors.map((docItem, idx) => (
-                                  <div
-                                    key={idx}
-                                    className="bg-white border border-slate-200 hover:border-teal-300 rounded-xl p-3.5 shadow-xs transition-all space-y-2.5"
-                                  >
-                                    <div className="flex items-start justify-between">
-                                      <div>
-                                        <div className="flex items-center space-x-2">
-                                          <h4 className="text-xs font-bold text-slate-900">{docItem.doctor.name}</h4>
-                                          <span className="bg-teal-50 text-teal-800 text-[10px] font-bold px-2 py-0.5 rounded-md border border-teal-100 flex items-center space-x-1">
-                                            <Star className="w-2.5 h-2.5 fill-teal-500 text-teal-500" />
-                                            <span>{docItem.rating}</span>
-                                          </span>
+                    {/* Input Field */}
+                    <input
+                      type="text"
+                      value={inputPrompt}
+                      onChange={e => setInputPrompt(e.target.value)}
+                      placeholder="Ask anything..."
+                      className="flex-1 bg-transparent border-0 text-slate-900 placeholder-slate-500 text-sm sm:text-base focus:outline-none focus:ring-0 px-2 font-medium"
+                    />
+
+                    {/* Mic Button */}
+                    <button
+                      type="button"
+                      onClick={toggleListening}
+                      className={`w-9 h-9 sm:w-10 sm:h-10 rounded-full flex items-center justify-center transition-all cursor-pointer ${
+                        isListening
+                          ? 'bg-red-100 text-red-600 animate-pulse'
+                          : 'text-slate-500 hover:text-slate-800'
+                      }`}
+                      title={isListening ? "Listening..." : "Voice input"}
+                    >
+                      {isListening ? <MicOff className="w-5 h-5 text-red-600" /> : <Mic className="w-5 h-5" />}
+                    </button>
+
+                    {/* Send Button */}
+                    <button
+                      type="submit"
+                      disabled={loadingChat || (!inputPrompt.trim() && !isListening)}
+                      className="w-10 h-10 sm:w-11 sm:h-11 rounded-full bg-slate-900 hover:bg-slate-800 text-white font-bold flex items-center justify-center shadow-md transition-transform active:scale-95 disabled:opacity-40 shrink-0 cursor-pointer"
+                      title="Send"
+                    >
+                      <ArrowUp className="w-5 h-5 text-white" />
+                    </button>
+                  </form>
+                </div>
+
+                {/* Preset Chips */}
+                <div className="flex flex-wrap items-center justify-center gap-2 max-w-xl">
+                  {presetChips.map((chip, idx) => (
+                    <button
+                      key={idx}
+                      type="button"
+                      onClick={() => {
+                        if (chip.startsWith('📋')) {
+                          setShowSymptomModal(true);
+                        } else {
+                          handleSendMessage(chip);
+                        }
+                      }}
+                      className="text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200/80 px-3.5 py-2 rounded-full whitespace-nowrap transition-all cursor-pointer shadow-2xs"
+                    >
+                      {chip}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              /* Conversation Messages Feed */
+              <div className="space-y-4">
+                {messages.map(msg => {
+                  const isUser = msg.sender === 'user';
+                  return (
+                    <div
+                      key={msg.id}
+                      className={`flex items-start space-x-3 ${isUser ? 'flex-row-reverse space-x-reverse' : ''}`}
+                    >
+                      <div
+                        className={`w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 text-white font-bold text-xs shadow-xs ${
+                          isUser ? 'bg-slate-900' : 'bg-teal-600'
+                        }`}
+                      >
+                        {isUser ? <User className="w-4 h-4 text-white" /> : <Bot className="w-4 h-4 text-white" />}
+                      </div>
+
+                      <div className="max-w-[92%] sm:max-w-[85%] space-y-1">
+                        <div
+                          className={`p-4 sm:p-5 rounded-2xl text-sm sm:text-base leading-relaxed ${
+                            isUser
+                              ? 'bg-slate-900 text-white shadow-xs'
+                              : 'bg-slate-50 text-slate-900 border border-slate-200 shadow-2xs'
+                          }`}
+                        >
+                          {isUser ? (
+                            <p className="whitespace-pre-line font-medium">{msg.text}</p>
+                          ) : (
+                            <div className="space-y-3">
+                              <div className="markdown-body space-y-2 [&_h2]:text-base sm:[&_h2]:text-lg [&_h2]:font-bold [&_h2]:text-slate-900 [&_h2]:mt-2 [&_h2]:mb-1 [&_h3]:text-sm sm:[&_h3]:text-base [&_h3]:font-bold [&_h3]:text-slate-900 [&_h3]:mt-2 [&_h3]:mb-1 [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:space-y-1.5 [&_ol]:list-decimal [&_ol]:pl-5 [&_ol]:space-y-1.5 [&_p]:text-sm sm:[&_p]:text-base [&_p]:leading-relaxed [&_p]:text-slate-800 [&_li]:text-sm sm:[&_li]:text-base [&_li]:text-slate-800 [&_strong]:font-bold [&_strong]:text-slate-950 [&_hr]:my-3 [&_hr]:border-slate-200">
+                                <Markdown>{msg.text}</Markdown>
+                              </div>
+
+                              {/* Interactive Doctor Cards inside Chat */}
+                              {msg.bookingData?.step === 'doctor_list' && msg.bookingData.doctors && (
+                                <div className="mt-3 space-y-3 pt-3 border-t border-slate-200">
+                                  <p className="text-sm font-bold text-slate-900 flex items-center space-x-2">
+                                    <Stethoscope className="w-4 h-4 sm:w-5 sm:h-5 text-teal-600" />
+                                    <span>Recommended Specialists for {msg.bookingData.specialty}:</span>
+                                  </p>
+
+                                  <div className="grid grid-cols-1 gap-3">
+                                    {msg.bookingData.doctors.map((docItem, idx) => (
+                                      <div
+                                        key={idx}
+                                        className="bg-white border border-slate-200 hover:border-teal-400 rounded-2xl p-4 shadow-xs transition-all space-y-3"
+                                      >
+                                        <div className="flex items-start justify-between">
+                                          <div>
+                                            <div className="flex items-center space-x-2">
+                                              <h4 className="text-sm sm:text-base font-extrabold text-slate-900">{docItem.doctor.name}</h4>
+                                              <span className="bg-teal-50 text-teal-800 text-xs font-bold px-2.5 py-0.5 rounded-md border border-teal-200 flex items-center space-x-1">
+                                                <Star className="w-3 h-3 fill-amber-500 text-amber-500" />
+                                                <span>{docItem.rating}</span>
+                                              </span>
+                                            </div>
+                                            <p className="text-xs sm:text-sm font-semibold text-slate-600 mt-1">
+                                              {docItem.doctor.specialty} • {docItem.doctor.qualification || docItem.doctor.experience}
+                                            </p>
+                                            <div className="flex flex-wrap items-center gap-2 text-xs text-slate-700 mt-1.5">
+                                              <span className="flex items-center space-x-1 font-bold text-slate-800">
+                                                <MapPin className="w-3.5 h-3.5 text-teal-600" />
+                                                <span>{docItem.hospitalName}</span>
+                                              </span>
+                                              <span>•</span>
+                                              <span>{docItem.distance}</span>
+                                              <span>•</span>
+                                              <span className="font-extrabold text-teal-700">{docItem.fee}</span>
+                                            </div>
+                                          </div>
                                         </div>
-                                        <p className="text-[11px] font-medium text-slate-500 mt-0.5">
-                                          {docItem.doctor.specialty} • {docItem.doctor.qualification || docItem.doctor.experience}
-                                        </p>
-                                        <div className="flex items-center space-x-3 text-[11px] text-slate-600 mt-1">
-                                          <span className="flex items-center space-x-1">
-                                            <MapPin className="w-3 h-3 text-slate-400" />
-                                            <span className="font-semibold text-slate-700">{docItem.hospitalName}</span>
-                                          </span>
-                                          <span>•</span>
-                                          <span>{docItem.distance}</span>
-                                          <span>•</span>
-                                          <span className="font-bold text-teal-700">{docItem.fee}</span>
+
+                                        {/* Slots Selection Buttons */}
+                                        <div>
+                                          <p className="text-xs font-bold text-slate-600 mb-2">Available Slots Today / Tomorrow:</p>
+                                          <div className="flex flex-wrap gap-2">
+                                            {docItem.availableSlots.map((slot, sIdx) => (
+                                              <button
+                                                key={sIdx}
+                                                type="button"
+                                                onClick={() => handleSlotSelect(docItem.doctor, docItem.hospitalName, slot)}
+                                                className="bg-teal-50 hover:bg-teal-600 hover:text-white text-teal-900 border border-teal-200 text-xs sm:text-sm font-bold px-3.5 py-2 rounded-xl transition-all shadow-2xs min-h-[40px] cursor-pointer"
+                                              >
+                                                {slot}
+                                              </button>
+                                            ))}
+                                          </div>
                                         </div>
                                       </div>
-                                    </div>
-
-                                    {/* Slots Selection Buttons */}
-                                    <div>
-                                      <p className="text-[10px] font-semibold text-slate-500 mb-1.5">Available Slots Today / Tomorrow:</p>
-                                      <div className="flex flex-wrap gap-1.5">
-                                        {docItem.availableSlots.map((slot, sIdx) => (
-                                          <button
-                                            key={sIdx}
-                                            onClick={() => handleSlotSelect(docItem.doctor, docItem.hospitalName, slot)}
-                                            className="bg-teal-50 hover:bg-teal-600 hover:text-white text-teal-800 border border-teal-200 text-xs font-bold px-3 py-1.5 rounded-lg transition-all shadow-2xs cursor-pointer"
-                                          >
-                                            {slot}
-                                          </button>
-                                        ))}
-                                      </div>
-                                    </div>
+                                    ))}
                                   </div>
-                                ))}
-                              </div>
-                            </div>
-                          )}
+                                </div>
+                              )}
 
-                          {/* Confirmation Action Box */}
-                          {msg.bookingData?.step === 'confirmation' && msg.bookingData.pendingBooking && (
-                            <div className="mt-3 p-3.5 bg-white border border-teal-200 rounded-xl shadow-xs space-y-2.5">
-                              <p className="text-xs font-semibold text-slate-700">Ready to finalize appointment booking?</p>
-                              <button
-                                onClick={() => handleConfirmBooking(msg.bookingData!.pendingBooking!)}
-                                className="w-full bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs py-2.5 rounded-xl transition-all shadow-md shadow-teal-600/20 flex items-center justify-center space-x-2 cursor-pointer"
-                              >
-                                <CheckCircle2 className="w-4 h-4" />
-                                <span>Confirm Appointment (Reply YES)</span>
-                              </button>
-                            </div>
-                          )}
-
-                          {/* Confirmed Appointment Quick Actions Box */}
-                          {msg.bookingData?.step === 'confirmed' && msg.bookingData.confirmedAppointment && (
-                            <div className="mt-3 p-3.5 bg-emerald-50 border border-emerald-200 rounded-xl space-y-3">
-                              <div className="flex items-center space-x-2 text-emerald-800 font-bold text-xs">
-                                <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                                <span>Appointment Saved to Medical Database</span>
-                              </div>
-
-                              <div className="flex flex-wrap gap-2 pt-1">
-                                <button
-                                  onClick={() => setSelectedSlipApp(msg.bookingData!.confirmedAppointment!)}
-                                  className="bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold px-3 py-1.5 rounded-lg transition-all flex items-center space-x-1.5 shadow-2xs cursor-pointer"
-                                >
-                                  <FileText className="w-3.5 h-3.5" />
-                                  <span>Download Appointment Slip</span>
-                                </button>
-
-                                {setActiveTab && (
+                              {/* Confirmation Action Box */}
+                              {msg.bookingData?.step === 'confirmation' && msg.bookingData.pendingBooking && (
+                                <div className="mt-3 p-4 bg-teal-50/80 border border-teal-200 rounded-2xl shadow-xs space-y-3">
+                                  <p className="text-sm font-bold text-teal-950">Ready to finalize appointment booking?</p>
                                   <button
-                                    onClick={() => setActiveTab('my-appointments')}
-                                    className="bg-white hover:bg-slate-100 text-slate-800 border border-slate-300 text-xs font-bold px-3 py-1.5 rounded-lg transition-all flex items-center space-x-1.5 cursor-pointer"
+                                    type="button"
+                                    onClick={() => handleConfirmBooking(msg.bookingData!.pendingBooking!)}
+                                    className="w-full bg-teal-600 hover:bg-teal-700 text-white font-extrabold text-sm py-3 rounded-xl transition-all shadow-md flex items-center justify-center space-x-2 min-h-[48px] cursor-pointer"
                                   >
-                                    <Calendar className="w-3.5 h-3.5 text-teal-600" />
-                                    <span>View My Appointments</span>
+                                    <CheckCircle2 className="w-5 h-5" />
+                                    <span>Confirm Appointment (Reply YES)</span>
                                   </button>
-                                )}
+                                </div>
+                              )}
 
-                                <a
-                                  href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(msg.bookingData.confirmedAppointment.doctorId + ' Erode')}`}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="bg-white hover:bg-slate-100 text-slate-800 border border-slate-300 text-xs font-bold px-3 py-1.5 rounded-lg transition-all flex items-center space-x-1.5"
-                                >
-                                  <Navigation className="w-3.5 h-3.5 text-teal-600" />
-                                  <span>Get Directions</span>
-                                </a>
+                              {/* Confirmed Appointment Quick Actions Box */}
+                              {msg.bookingData?.step === 'confirmed' && msg.bookingData.confirmedAppointment && (
+                                <div className="mt-3 p-4 bg-emerald-50 border border-emerald-200 rounded-xl space-y-3">
+                                  <div className="flex items-center space-x-2 text-emerald-800 font-bold text-xs">
+                                    <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                                    <span>Appointment Saved to Medical Database</span>
+                                  </div>
 
-                                {setActiveTab && (
-                                  <button
-                                    onClick={() => setActiveTab('medicines')}
-                                    className="bg-white hover:bg-slate-100 text-slate-800 border border-slate-300 text-xs font-bold px-3 py-1.5 rounded-lg transition-all flex items-center space-x-1.5 cursor-pointer"
-                                  >
-                                    <Pill className="w-3.5 h-3.5 text-teal-600" />
-                                    <span>Set Medicine Reminder</span>
-                                  </button>
-                                )}
-                              </div>
-                            </div>
-                          )}
+                                  <div className="flex flex-wrap gap-2 pt-1">
+                                    <button
+                                      type="button"
+                                      onClick={() => setSelectedSlipApp(msg.bookingData!.confirmedAppointment!)}
+                                      className="bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold px-3.5 py-2 rounded-xl transition-all flex items-center space-x-1.5 shadow-2xs cursor-pointer"
+                                    >
+                                      <FileText className="w-4 h-4" />
+                                      <span>Download Appointment Slip</span>
+                                    </button>
 
-                          {(msg.text.includes('Dr.') || msg.text.includes('Hospital') || msg.text.includes('doctor') || msg.text.includes('Specialist') || msg.text.includes('appointment')) && !msg.bookingData && setActiveTab && (
-                            <div className="pt-2 border-t border-slate-200/80 flex flex-wrap gap-2">
-                              <button
-                                onClick={() => setActiveTab('find-book')}
-                                className="bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs px-3 py-1.5 rounded-lg transition-all flex items-center space-x-1.5 shadow-xs"
-                              >
-                                <Stethoscope className="w-3.5 h-3.5" />
-                                <span>Book Recommended Doctor</span>
-                              </button>
+                                    {setActiveTab && (
+                                      <button
+                                        type="button"
+                                        onClick={() => setActiveTab('my-appointments')}
+                                        className="bg-white hover:bg-slate-100 text-slate-800 border border-slate-300 text-xs font-bold px-3.5 py-2 rounded-xl transition-all flex items-center space-x-1.5 cursor-pointer"
+                                      >
+                                        <Calendar className="w-4 h-4 text-teal-600" />
+                                        <span>View My Appointments</span>
+                                      </button>
+                                    )}
+
+                                    <a
+                                      href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(msg.bookingData.confirmedAppointment.doctorId + ' Erode')}`}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="bg-white hover:bg-slate-100 text-slate-800 border border-slate-300 text-xs font-bold px-3.5 py-2 rounded-xl transition-all flex items-center space-x-1.5"
+                                    >
+                                      <Navigation className="w-4 h-4 text-teal-600" />
+                                      <span>Get Directions</span>
+                                    </a>
+                                  </div>
+                                </div>
+                              )}
                             </div>
                           )}
                         </div>
-                      )}
-                    </div>
 
-                    <div className="flex items-center space-x-2 text-[10px] text-slate-400 px-1 font-medium">
-                      <span>{msg.timestamp}</span>
-                      {!isUser && (
+                        <div className="flex items-center space-x-2 text-[10px] text-slate-400 px-1 font-medium">
+                          <span>{msg.timestamp}</span>
+                          {!isUser && (
+                            <button
+                              type="button"
+                              onClick={() => speak(msg.text)}
+                              className="hover:text-teal-600 flex items-center space-x-0.5"
+                              title="Read message aloud"
+                            >
+                              <Volume2 className="w-3 h-3 text-teal-600" />
+                              <span>Listen</span>
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+
+                {loadingChat && (
+                  <div className="flex items-center space-x-3 text-xs text-slate-700 bg-slate-100 p-3.5 rounded-xl border border-slate-200 w-fit font-medium">
+                    <Loader2 className="w-4 h-4 animate-spin text-teal-600" />
+                    <span>CareFlow AI is thinking...</span>
+                  </div>
+                )}
+
+                <div ref={messagesEndRef} />
+              </div>
+            )}
+          </div>
+
+          {/* Sticky Bottom Pill Bar (When conversation is active) */}
+          {messages.length > 1 && (
+            <div className="p-3 sm:p-4 border-t border-slate-200 bg-white shrink-0">
+              <div className="relative max-w-2xl w-full mx-auto">
+                <form
+                  onSubmit={e => {
+                    e.preventDefault();
+                    handleSendMessage();
+                  }}
+                  className="bg-slate-100 hover:bg-slate-200/70 transition-all border border-slate-300 focus-within:border-teal-600 focus-within:bg-white focus-within:ring-2 focus-within:ring-teal-500/20 rounded-full px-3 sm:px-4 py-2 flex items-center gap-2 shadow-2xs"
+                >
+                  <button
+                    type="button"
+                    onClick={() => setShowAttachMenu(!showAttachMenu)}
+                    className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-white hover:bg-slate-200 text-slate-700 flex items-center justify-center border border-slate-200 transition-all shrink-0 cursor-pointer shadow-2xs"
+                    title="Add action or attachment"
+                  >
+                    <Plus className="w-5 h-5 text-slate-700" />
+                  </button>
+
+                  {/* Popover Attachment Menu */}
+                  {showAttachMenu && (
+                    <div className="absolute left-0 bottom-16 z-50 bg-white border border-slate-200 rounded-2xl p-2 shadow-xl w-64 text-left space-y-1">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowAttachMenu(false);
+                          setShowSymptomModal(true);
+                        }}
+                        className="w-full text-left px-3 py-2 text-xs font-bold text-slate-800 hover:bg-slate-100 rounded-xl flex items-center space-x-2 transition-colors"
+                      >
+                        <ClipboardList className="w-4 h-4 text-teal-600" />
+                        <span>Structured Symptom Assessment</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowAttachMenu(false);
+                          setActiveSubTab('report');
+                        }}
+                        className="w-full text-left px-3 py-2 text-xs font-bold text-slate-800 hover:bg-slate-100 rounded-xl flex items-center space-x-2 transition-colors"
+                      >
+                        <Upload className="w-4 h-4 text-teal-600" />
+                        <span>Upload Medical Report</span>
+                      </button>
+                      {setActiveTab && (
                         <button
-                          onClick={() => speak(msg.text)}
-                          className="hover:text-teal-600 flex items-center space-x-0.5"
-                          title="Read message aloud"
+                          type="button"
+                          onClick={() => {
+                            setShowAttachMenu(false);
+                            setActiveTab('find-book');
+                          }}
+                          className="w-full text-left px-3 py-2 text-xs font-bold text-slate-800 hover:bg-slate-100 rounded-xl flex items-center space-x-2 transition-colors"
                         >
-                          <Volume2 className="w-3 h-3 text-teal-600" />
-                          <span>Listen</span>
+                          <Stethoscope className="w-4 h-4 text-teal-600" />
+                          <span>Book Doctor Specialist</span>
                         </button>
                       )}
                     </div>
-                  </div>
-                </div>
-              );
-            })}
+                  )}
 
-            {loadingChat && (
-              <div className="flex items-center space-x-3 text-xs text-slate-600 bg-slate-50 p-3.5 rounded-xl border border-slate-200 w-fit font-medium">
-                <Loader2 className="w-4 h-4 animate-spin text-teal-600" />
-                <span>CareFlow AI is analyzing prompt...</span>
+                  <input
+                    type="text"
+                    value={inputPrompt}
+                    onChange={e => setInputPrompt(e.target.value)}
+                    placeholder="Ask anything..."
+                    className="flex-1 bg-transparent border-0 text-slate-900 placeholder-slate-500 text-sm sm:text-base focus:outline-none focus:ring-0 px-2 font-medium"
+                  />
+
+                  <button
+                    type="button"
+                    onClick={toggleListening}
+                    className={`w-9 h-9 sm:w-10 sm:h-10 rounded-full flex items-center justify-center transition-all cursor-pointer ${
+                      isListening
+                        ? 'bg-red-100 text-red-600 animate-pulse'
+                        : 'text-slate-500 hover:text-slate-800'
+                    }`}
+                    title={isListening ? "Listening..." : "Voice input"}
+                  >
+                    {isListening ? <MicOff className="w-5 h-5 text-red-600" /> : <Mic className="w-5 h-5" />}
+                  </button>
+
+                  <button
+                    type="submit"
+                    disabled={loadingChat || (!inputPrompt.trim() && !isListening)}
+                    className="w-10 h-10 sm:w-11 sm:h-11 rounded-full bg-slate-900 hover:bg-slate-800 text-white font-bold flex items-center justify-center shadow-md transition-transform active:scale-95 disabled:opacity-40 shrink-0 cursor-pointer"
+                    title="Send"
+                  >
+                    <ArrowUp className="w-5 h-5 text-white" />
+                  </button>
+                </form>
               </div>
-            )}
-
-            <div ref={messagesEndRef} />
-          </div>
-
-          {/* Structured Assessment Banner */}
-          <div className="px-4 py-2 bg-teal-50/70 border-t border-slate-200 flex items-center justify-between gap-2">
-            <button
-              type="button"
-              onClick={() => setShowSymptomModal(true)}
-              className="bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs px-3.5 py-1.5 rounded-xl transition-all shadow-2xs flex items-center space-x-2 cursor-pointer"
-            >
-              <ClipboardList className="w-4 h-4 text-white" />
-              <span>📋 Structured Symptom Assessment (Age, Temp & Symptoms)</span>
-            </button>
-            <span className="text-[11px] text-teal-800 font-medium hidden sm:inline-block">
-              Multi-factor clinical evaluation with instant doctor slot matching
-            </span>
-          </div>
-
-          {/* Preset Prompts Chips */}
-          <div className="px-4 py-2.5 border-t border-slate-100 bg-slate-50/80 overflow-x-auto scrollbar-none flex gap-2">
-            {presetChips.map((chip, idx) => (
-              <button
-                key={idx}
-                onClick={() => {
-                  if (chip.startsWith('📋')) {
-                    setShowSymptomModal(true);
-                  } else {
-                    handleSendMessage(chip);
-                  }
-                }}
-                className="text-xs font-medium bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 px-3.5 py-1.5 rounded-xl whitespace-nowrap transition-colors flex-shrink-0 shadow-xs cursor-pointer"
-              >
-                💡 {chip}
-              </button>
-            ))}
-          </div>
-
-          {/* Input Bar */}
-          <div className="p-4 border-t border-slate-200 bg-white">
-            <form
-              onSubmit={e => {
-                e.preventDefault();
-                handleSendMessage();
-              }}
-              className="flex items-center space-x-2"
-            >
-              <input
-                type="text"
-                value={inputPrompt}
-                onChange={e => setInputPrompt(e.target.value)}
-                placeholder="Ask about your health, medications, or vitals..."
-                className="flex-1 px-4 py-2.5 text-xs sm:text-sm border border-slate-200 rounded-xl focus:outline-none focus:border-teal-500"
-              />
-
-              <button
-                type="submit"
-                disabled={loadingChat || !inputPrompt.trim()}
-                className="bg-teal-600 hover:bg-teal-700 disabled:opacity-50 text-white px-5 py-2.5 rounded-xl font-bold text-xs transition-all shadow-md shadow-teal-600/20 flex items-center space-x-1.5 flex-shrink-0"
-              >
-                <span>Send</span>
-                <Send className="w-3.5 h-3.5" />
-              </button>
-            </form>
-
-            <div className="mt-2 text-center">
-              <span className="text-[10px] font-medium text-slate-400">
-                🔒 Medical Privacy Safe • Powered by Gemini 3.6 Flash Server Engine
-              </span>
             </div>
-          </div>
+          )}
         </div>
       ) : (
         /* Medical Report Scanner SubTab */
