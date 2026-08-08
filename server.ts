@@ -68,7 +68,7 @@ async function startServer() {
 
   // Initialize Gemini AI Client lazily/safely
   const getGeminiClient = () => {
-    const apiKey = process.env.GEMINI_API_KEY;
+    const apiKey = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
     if (!apiKey) return null;
     try {
       return new GoogleGenAI({ apiKey });
@@ -78,9 +78,56 @@ async function startServer() {
     }
   };
 
-  // Helper to retry Gemini calls across available model aliases if a model is unavailable (503/429)
+  // Helper to call Gemini for chat with model fallbacks
+  const generateGeminiChatResponse = async (ai: GoogleGenAI, systemInstruction: string, history: any[], prompt: string) => {
+    const contents: Array<{ role: 'user' | 'model'; parts: Array<{ text: string }> }> = [];
+
+    if (history && Array.isArray(history)) {
+      for (const h of history) {
+        const role = (h.role === 'user' || h.role === 'Patient' || h.sender === 'user') ? 'user' : 'model';
+        const textVal = h.text || h.content;
+        if (textVal && typeof textVal === 'string' && textVal.trim()) {
+          contents.push({
+            role,
+            parts: [{ text: textVal }]
+          });
+        }
+      }
+    }
+
+    contents.push({
+      role: 'user',
+      parts: [{ text: prompt }]
+    });
+
+    const modelsToTry = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash'];
+    let lastErr: any = null;
+
+    for (const modelName of modelsToTry) {
+      try {
+        const response = await ai.models.generateContent({
+          model: modelName,
+          contents: contents,
+          config: {
+            systemInstruction: systemInstruction,
+            temperature: 0.7,
+          }
+        });
+        const text = response?.text;
+        if (text) {
+          return { text, modelName };
+        }
+      } catch (err: any) {
+        console.warn(`Gemini chat model ${modelName} failed: ${err?.message || err}`);
+        lastErr = err;
+      }
+    }
+    throw lastErr || new Error('All Gemini models failed');
+  };
+
+  // Helper to retry Gemini calls across available model aliases if a model is unavailable
   const generateContentWithFallback = async (ai: GoogleGenAI, params: any) => {
-    const modelsToTry = ['gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-1.5-flash-8b'];
+    const modelsToTry = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash'];
     let lastErr: any = null;
     for (const modelName of modelsToTry) {
       for (let attempt = 1; attempt <= 2; attempt++) {
@@ -216,18 +263,37 @@ Patient Context: ${JSON.stringify(patientContext || {})}
 Current Turn: ${userTurns}
 `;
 
-      // Execute via Groq API exclusively for chat
-      const groq = getGroqClient();
-      if (!groq) {
-        throw new Error('Groq API client is not configured');
+      // Try Gemini AI API first (automatically provided by AI Studio environment)
+      const ai = getGeminiClient();
+      if (ai) {
+        try {
+          const geminiResult = await generateGeminiChatResponse(ai, systemInstruction, history, prompt);
+          return res.json({
+            response: geminiResult.text,
+            disclaimer: HEALTH_KNOWLEDGE_BASE.meta.disclaimer,
+            source: `gemini-api (${geminiResult.modelName})`
+          });
+        } catch (geminiErr: any) {
+          console.warn('Gemini chat error, trying Groq fallback:', geminiErr?.message || geminiErr);
+        }
       }
 
-      const groqResult = await generateGroqChatResponse(groq, systemInstruction, history, prompt);
-      return res.json({
-        response: groqResult.text,
-        disclaimer: HEALTH_KNOWLEDGE_BASE.meta.disclaimer,
-        source: `groq-api (${groqResult.modelName})`
-      });
+      // Try Groq API as secondary option
+      const groq = getGroqClient();
+      if (groq) {
+        try {
+          const groqResult = await generateGroqChatResponse(groq, systemInstruction, history, prompt);
+          return res.json({
+            response: groqResult.text,
+            disclaimer: HEALTH_KNOWLEDGE_BASE.meta.disclaimer,
+            source: `groq-api (${groqResult.modelName})`
+          });
+        } catch (groqErr: any) {
+          console.warn('Groq chat error:', groqErr?.message || groqErr);
+        }
+      }
+
+      throw new Error('No AI service (Gemini or Groq) available or responding');
     } catch (error: any) {
       console.warn('AI Chat Error / High Demand Fallback Triggered:', error?.message || error);
       const historyList = req.body?.history;
@@ -273,9 +339,8 @@ Would you like me to help you book an appointment with one of them?`,
         return res.status(400).json({ error: 'Provide reportText or imageBase64' });
       }
 
-      const groq = getGroqClient();
       const ai = getGeminiClient();
-      if (!ai && !groq) {
+      if (!ai) {
         return res.json({
           summary: 'Body is a bit weak (low iron) + something is inflamed somewhere (high ESR) + slightly high uric acid.',
           keyFindings: [
