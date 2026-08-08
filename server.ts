@@ -2,6 +2,7 @@ import express from 'express';
 import path from 'path';
 import { createServer as createViteServer } from 'vite';
 import { GoogleGenAI } from '@google/genai';
+import Groq from 'groq-sdk';
 import dotenv from 'dotenv';
 import { ERODE_HOSPITALS, ERODE_DOCTORS } from './src/data/hospitalsData';
 import { HEALTH_KNOWLEDGE_BASE } from './src/data/healthKnowledgeBase';
@@ -13,6 +14,57 @@ async function startServer() {
   const PORT = 3000;
 
   app.use(express.json({ limit: '10mb' }));
+
+  // Initialize Groq AI Client lazily/safely
+  const getGroqClient = () => {
+    const apiKey = process.env.GROQ_API_KEY;
+    if (!apiKey) return null;
+    try {
+      return new Groq({ apiKey });
+    } catch (err) {
+      console.error('Error instantiating Groq client:', err);
+      return null;
+    }
+  };
+
+  // Helper to call Groq API with fallback models
+  const generateGroqChatResponse = async (groq: Groq, systemInstruction: string, history: any[], prompt: string) => {
+    const groqMessages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [
+      { role: 'system', content: systemInstruction }
+    ];
+
+    if (history && Array.isArray(history)) {
+      for (const h of history) {
+        const role = (h.role === 'user' || h.role === 'Patient' || h.sender === 'user') ? 'user' : 'assistant';
+        if (h.text && typeof h.text === 'string') {
+          groqMessages.push({ role, content: h.text });
+        }
+      }
+    }
+
+    groqMessages.push({ role: 'user', content: prompt });
+
+    const modelsToTry = ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant', 'mixtral-8x7b-32768'];
+    let lastErr: any = null;
+
+    for (const modelName of modelsToTry) {
+      try {
+        const completion = await groq.chat.completions.create({
+          messages: groqMessages,
+          model: modelName,
+          temperature: 0.7,
+        });
+        const text = completion.choices[0]?.message?.content;
+        if (text) {
+          return { text, modelName };
+        }
+      } catch (err: any) {
+        console.warn(`Groq model ${modelName} failed: ${err?.message || err}`);
+        lastErr = err;
+      }
+    }
+    throw lastErr || new Error('All Groq models failed');
+  };
 
   // Initialize Gemini AI Client lazily/safely
   const getGeminiClient = () => {
@@ -28,7 +80,7 @@ async function startServer() {
 
   // Helper to retry Gemini calls across available model aliases if a model is unavailable (503/429)
   const generateContentWithFallback = async (ai: GoogleGenAI, params: any) => {
-    const modelsToTry = ['gemini-3.6-flash', 'gemini-flash-latest'];
+    const modelsToTry = ['gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-1.5-flash-8b'];
     let lastErr: any = null;
     for (const modelName of modelsToTry) {
       for (let attempt = 1; attempt <= 2; attempt++) {
@@ -80,12 +132,10 @@ async function startServer() {
           return signKw.split(' ').some(word => word.length > 4 && lowerPrompt.includes(word));
         });
 
-      const ai = getGeminiClient();
-      if (!ai) {
-        // Fallback powered by Clinical Consultation Protocol & Health Knowledge Base
-        if (isRedFlag) {
-          return res.json({
-            response: `🚨 **EMERGENCY MEDICAL ALERT**
+      // Emergency Red Flag Alert
+      if (isRedFlag) {
+        return res.json({
+          response: `🚨 **EMERGENCY MEDICAL ALERT**
 
 Your description mentions potential high-risk emergency symptoms.
 
@@ -95,55 +145,8 @@ Your description mentions potential high-risk emergency symptoms.
 3. Do not delay emergency evaluation for self-care or chat guidance.
 
 *${HEALTH_KNOWLEDGE_BASE.meta.disclaimer}*`,
-            disclaimer: HEALTH_KNOWLEDGE_BASE.meta.disclaimer,
-            source: 'clinical-protocol-emergency'
-          });
-        }
-
-        // If this is the first turn without prior context
-        if (!hasHistory) {
-          return res.json({
-            response: `I'm really sorry to hear that you're not feeling well today. I'm here to listen and help you understand what might be going on.
-
-To help me better understand your situation, could you please answer a few quick questions?
-
-1. **Duration & Onset:** When did this symptom start, and did it come on suddenly or gradually?
-2. **Location & Character:** Where exactly is the discomfort, and how would you describe it (e.g., dull, sharp, throbbing, aching)?
-3. **Severity:** On a scale of 1 to 10, how severe is the discomfort right now?
-4. **Accompanying Symptoms:** Are you experiencing any other symptoms, such as fever, nausea, dizziness, or fatigue?
-5. **Triggers:** Is there anything that makes it feel better or worse?
-
-Once you share a few more details, I'll be glad to summarize your symptoms, discuss potential explanations, and suggest safe self-care steps.`,
-            disclaimer: HEALTH_KNOWLEDGE_BASE.meta.disclaimer,
-            source: 'clinical-protocol-initial'
-          });
-        }
-
-        // Subsequent turn fallback
-        return res.json({
-          response: `Thank you for sharing those details with me.
-
-### 📋 Summary of What You Shared
-You have been experiencing symptoms as described in our conversation.
-
-### 🔍 Possible Explanations
-• **Common Viral / Functional Strain** (~70% likelihood): Often associated with temporary physical stress, mild infection, or fatigue.
-• **Secondary Metabolic / Environmental Factor** (~25% likelihood): Related to fluid balance, sleep, or environmental triggers.
-
-### 🌿 Safe Self-Care Measures
-• Rest comfortably in a well-ventilated, calm environment.
-• Sip plenty of fluids (water, warm herbal tea, ORS) throughout the day.
-• Keep a simple log of your symptoms and vitals.
-
-### 🩺 When to Seek Professional Care
-Please consult a healthcare professional if:
-• Your symptoms become severe or progressively worsen.
-• Symptoms persist beyond 3 to 5 days without improvement.
-• You develop red-flag signs such as difficulty breathing, severe pain, or high fever.
-
-*${HEALTH_KNOWLEDGE_BASE.meta.disclaimer}*`,
           disclaimer: HEALTH_KNOWLEDGE_BASE.meta.disclaimer,
-          source: 'clinical-protocol-followup'
+          source: 'clinical-protocol-emergency'
         });
       }
 
@@ -213,29 +216,53 @@ Patient Context: ${JSON.stringify(patientContext || {})}
 Current Turn: ${userTurns}
 `;
 
-      const contents = history && Array.isArray(history) && history.length > 0
-        ? [...history.map((h: any) => `${h.role === 'user' ? 'Patient' : 'CareFlow AI'}: ${h.text}`), `Patient: ${prompt}`].join('\n\n')
-        : prompt;
+      // 1. Try Groq API first
+      const groq = getGroqClient();
+      if (groq) {
+        try {
+          const groqResult = await generateGroqChatResponse(groq, systemInstruction, history, prompt);
+          return res.json({
+            response: groqResult.text,
+            disclaimer: HEALTH_KNOWLEDGE_BASE.meta.disclaimer,
+            source: `groq-api (${groqResult.modelName})`
+          });
+        } catch (groqErr: any) {
+          console.warn('Groq API call failed, falling back to Gemini / Clinical Protocol:', groqErr?.message || groqErr);
+        }
+      }
 
-      const aiResponse = await generateContentWithFallback(ai, {
-        contents,
-        config: {
-          systemInstruction,
-          temperature: 0.7,
-        },
-      });
+      // 2. Try Gemini API as secondary
+      const ai = getGeminiClient();
+      if (ai) {
+        try {
+          const contents = history && Array.isArray(history) && history.length > 0
+            ? [...history.map((h: any) => `${h.role === 'user' || h.role === 'Patient' || h.sender === 'user' ? 'Patient' : 'CareFlow AI'}: ${h.text}`), `Patient: ${prompt}`].join('\n\n')
+            : prompt;
 
-      const responseText = aiResponse.text || 'Thank you for asking. Please remember to consult your healthcare provider for medical advice.';
+          const aiResponse = await generateContentWithFallback(ai, {
+            contents,
+            config: {
+              systemInstruction,
+              temperature: 0.7,
+            },
+          });
 
-      return res.json({
-        response: responseText,
-        disclaimer: HEALTH_KNOWLEDGE_BASE.meta.disclaimer,
-        source: 'gemini-model-trained'
-      });
+          const responseText = aiResponse.text || 'Thank you for asking. Please remember to consult your healthcare provider for medical advice.';
+
+          return res.json({
+            response: responseText,
+            disclaimer: HEALTH_KNOWLEDGE_BASE.meta.disclaimer,
+            source: 'gemini-model-trained'
+          });
+        } catch (geminiErr: any) {
+          console.warn('Gemini API call failed:', geminiErr?.message || geminiErr);
+        }
+      }
     } catch (error: any) {
       console.warn('AI Chat Error / High Demand Fallback Triggered:', error?.message || error);
-      const userTurns = history && Array.isArray(history) 
-        ? history.filter((h: any) => h.role === 'user' || h.role === 'Patient').length + 1
+      const historyList = req.body?.history;
+      const userTurns = historyList && Array.isArray(historyList) 
+        ? historyList.filter((h: any) => h.role === 'user' || h.role === 'Patient').length + 1
         : 1;
 
       const userQuery = req.body?.prompt || 'your health query';

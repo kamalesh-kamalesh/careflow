@@ -383,7 +383,7 @@ Since full symptom details have been provided above, please follow the clinical 
             gender: patient?.gender,
             medicalHistory: patient?.conditions
           },
-          history: messages.slice(-4).map(m => ({ role: m.sender, text: m.text }))
+          history: messages.slice(-10).map(m => ({ role: m.sender === 'user' ? 'user' : 'assistant', text: m.text }))
         })
       });
 
@@ -515,7 +515,7 @@ Based on your request, here are top **${specialty}** specialists and available a
         body: JSON.stringify({
           prompt: text,
           patientContext,
-          history: newMessages.slice(-4).map(m => ({ role: m.sender, text: m.text }))
+          history: newMessages.slice(-10).map(m => ({ role: m.sender === 'user' ? 'user' : 'assistant', text: m.text }))
         })
       });
 
@@ -528,12 +528,15 @@ Based on your request, here are top **${specialty}** specialists and available a
 
       const isTurn3OrDoctorRequested =
         isExplicitDoctorBookingRequest ||
-        lowerResp.includes('routine') ||
-        lowerResp.includes('urgent') ||
-        lowerResp.includes('book an appointment') ||
-        lowerResp.includes('appointment feature') ||
-        lowerResp.includes('specialist to consult') ||
-        lowerResp.includes('general physician');
+        (userMsgCount >= 3 && (
+          lowerResp.includes('routine') ||
+          lowerResp.includes('urgent') ||
+          lowerResp.includes('book an appointment') ||
+          lowerResp.includes('appointment feature') ||
+          lowerResp.includes('specialist to consult') ||
+          lowerResp.includes('general physician') ||
+          lowerResp.includes('recommended doctor')
+        ));
 
       const botMsg: ChatMessage = {
         id: `msg_bot_${Date.now()}`,
