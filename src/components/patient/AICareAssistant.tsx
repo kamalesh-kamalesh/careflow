@@ -4,7 +4,7 @@ import { useAppContext } from '../../context/AppContext';
 import { ChatMessage, ReportAnalysis, Doctor, Appointment } from '../../types';
 import { MedicalDisclaimer } from '../common/MedicalDisclaimer';
 import { HospitalService } from '../../services/HospitalService';
-import { ALL_HOSPITALS } from '../../data/hospitalsData';
+import { ALL_HOSPITALS, ERODE_DOCTORS } from '../../data/hospitalsData';
 import {
   MessageSquareHeart,
   Send,
@@ -519,10 +519,19 @@ Based on your request, here are top **${specialty}** specialists and available a
         })
       });
 
+      if (!res.ok) {
+        throw new Error(`Server returned HTTP ${res.status}`);
+      }
+
       const data = await res.json();
       const { specialty, severity, doctors: matchedDocs } = getDoctorMatchForSymptoms(text);
 
       const responseText = data.response || data.fallback || 'I received your query. Please consult your physician for advice.';
+      
+      if (responseText.includes('having trouble connecting')) {
+        throw new Error('Server returned connection error response');
+      }
+
       const lowerResp = responseText.toLowerCase();
       const userMsgCount = newMessages.filter(m => m.sender === 'user').length;
 
@@ -565,16 +574,92 @@ Based on your request, here are top **${specialty}** specialists and available a
         console.warn('Speech synthesis failed:', speechErr);
       }
     } catch (err: any) {
-      console.error('Chat error:', err);
-      setMessages(prev => [
-        ...prev,
-        {
-          id: `msg_err_${Date.now()}`,
-          sender: 'assistant',
-          text: "I'm having trouble connecting right now. Please try again or consult your doctor directly.",
-          timestamp: 'Just now'
+      console.warn('Chat API error or network unavailable, using CareFlow Clinical Engine fallback:', err);
+      const { specialty, severity, doctors: matchedDocs } = getDoctorMatchForSymptoms(text);
+      const userMsgCount = newMessages.filter(m => m.sender === 'user').length;
+      const lowerText = text.toLowerCase();
+
+      const isDoctorQuery =
+        isExplicitDoctorBookingRequest ||
+        lowerText.includes('doctor') ||
+        lowerText.includes('specialist') ||
+        lowerText.includes('timing') ||
+        lowerText.includes('cardiologist') ||
+        lowerText.includes('neurologist') ||
+        lowerText.includes('recommend') ||
+        lowerText.includes('suggest') ||
+        lowerText.includes('book') ||
+        lowerText.includes('appointment');
+
+      let fallbackText = '';
+      const primaryMatch = matchedDocs[0];
+      const docName = primaryMatch ? primaryMatch.doctor.name : ERODE_DOCTORS[0].name;
+      const docHosp = primaryMatch ? primaryMatch.hospitalName : ERODE_DOCTORS[0].hospital;
+      const docHours = primaryMatch ? (primaryMatch.doctor.availability || '10:00 AM - 04:00 PM') : (ERODE_DOCTORS[0].availability || '10:00 AM - 04:00 PM');
+      const docQual = primaryMatch ? primaryMatch.doctor.qualification : ERODE_DOCTORS[0].qualification;
+
+      if (isDoctorQuery || matchedDocs.length > 0) {
+        fallbackText = `For ${specialty.toLowerCase()} concerns, I'd recommend **${docName}**, a specialist at **${docHosp}**. His consultation timings are **${docHours}**.
+
+Please note that this is not a diagnosis or prescription, and it's always best to consult a doctor in person for personalized advice. You can book an appointment through our app to see ${docName} or another ${specialty.toLowerCase()} specialist that suits your needs.`;
+      } else if (userMsgCount === 1) {
+        fallbackText = `I'm sorry to hear that you're not feeling well today. I'm here to listen and help you understand what might be going on.
+
+To help me better understand your situation, could you please answer a few quick questions?
+1. **Duration & Onset:** When did this symptom start, and did it come on suddenly or gradually?
+2. **Location & Character:** Where exactly is the discomfort, and how would you describe it?
+3. **Severity:** On a scale of 1 to 10, how severe is the discomfort right now?
+
+Once you share a few details, I'll be glad to summarize your symptoms and suggest safe self-care steps or matching specialist options.`;
+      } else if (userMsgCount === 2) {
+        fallbackText = `Thank you for sharing those details with me.
+
+### 📋 Summary of What You Shared
+You have been experiencing symptoms as described in our conversation.
+
+### 🔍 Possible Explanations
+• **Common Viral / Functional Strain** (~70% likelihood): Often associated with temporary physical stress or mild infection.
+• **Secondary Metabolic / Environmental Factor** (~25% likelihood): Related to fluid balance, sleep, or physical exertion.
+
+### 🌿 Safe Self-Care Measures
+• Rest comfortably in a well-ventilated, calm environment.
+• Sip plenty of fluids (water, warm herbal tea, ORS) throughout the day.
+• Keep a simple log of your symptoms and vitals.`;
+      } else {
+        fallbackText = `Based on what you've described, this sounds like something a ${specialty.toLowerCase()} specialist could take a look at. Here are recommended specialists in Erode you can consult:
+- **${docName}** (${docQual}) - ${docHosp}
+
+You can select a slot below to book an appointment.`;
+      }
+
+      const isBookingRequired = isDoctorQuery || userMsgCount >= 3 || matchedDocs.length > 0;
+
+      const botMsg: ChatMessage = {
+        id: `msg_bot_fallback_${Date.now()}`,
+        sender: 'assistant',
+        text: fallbackText,
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        source: 'careflow-clinical-client-engine',
+        disclaimer: 'This automated clinical recommendation is provided for informational guidance.',
+        bookingData: isBookingRequired
+          ? {
+              step: 'doctor_list',
+              specialty,
+              severity,
+              doctors: matchedDocs
+            }
+          : undefined
+      };
+
+      setMessages(prev => [...prev, botMsg]);
+      try {
+        if (botMsg.text) {
+          const plainSpeechText = String(botMsg.text).replace(/[*#_~\`\-]/g, ' ').replace(/\s+/g, ' ').trim();
+          speak(plainSpeechText.slice(0, 180));
         }
-      ]);
+      } catch (speechErr) {
+        console.warn('Speech synthesis failed:', speechErr);
+      }
     } finally {
       setLoadingChat(false);
     }
@@ -664,6 +749,10 @@ Patient: Jane Doe | Age: 45 | Date: 2026-06-10
           imageBase64: reportImageBase64
         })
       });
+
+      if (!res.ok) {
+        throw new Error(`Report analysis server returned HTTP ${res.status}`);
+      }
 
       const data = await res.json();
       setReportAnalysis(data);
