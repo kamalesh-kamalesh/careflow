@@ -7,6 +7,10 @@ export interface Patient {
   gender: 'Female' | 'Male' | 'Other' | string;
   bloodType: string;
   bloodGroup?: string;
+  /** SHA-256 hex digest of the account password. Never store plaintext.
+   *  Undefined for seed/demo patients — they can only sign in via the
+   *  explicit "Instant Demo Profile" buttons, never the real sign-in form. */
+  passwordHash?: string;
   allergies: string[];
   conditions: string[];
   caregiverId: string | null;

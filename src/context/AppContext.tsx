@@ -56,6 +56,11 @@ interface AppContextType {
   selectedDistrict: string;
   setSelectedDistrict: (district: string) => void;
 
+  // Theme control state
+  theme: 'light' | 'dark';
+  setTheme: (theme: 'light' | 'dark') => void;
+  toggleTheme: () => void;
+
   // Offline Caching & Synchronization extensions
   isOffline: boolean;
   simulatedOffline: boolean;
@@ -142,6 +147,30 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     setSelectedDistrictState(district);
     localStorage.setItem('careflow_selected_district', district);
     setToastMessage(`Location set to ${district} District`);
+  };
+
+  // Theme control state (Light / Dark mode for clinical environments)
+  const [theme, setThemeState] = useState<'light' | 'dark'>(() => {
+    const saved = localStorage.getItem('careflow_theme');
+    if (saved === 'dark' || saved === 'light') return saved;
+    return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  });
+
+  useEffect(() => {
+    localStorage.setItem('careflow_theme', theme);
+    if (theme === 'dark') {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+  }, [theme]);
+
+  const setTheme = (newTheme: 'light' | 'dark') => {
+    setThemeState(newTheme);
+  };
+
+  const toggleTheme = () => {
+    setThemeState(prev => (prev === 'light' ? 'dark' : 'light'));
   };
 
   // Sync window online/offline events
@@ -440,6 +469,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       gender: newPatientData.gender || 'Other',
       bloodType: newPatientData.bloodGroup || newPatientData.bloodType || 'O+',
       bloodGroup: newPatientData.bloodGroup || 'O+',
+      passwordHash: newPatientData.passwordHash,
       phone: newPatientData.phone || '',
       email: newPatientData.email || '',
       district: newPatientData.district || selectedDistrict || 'Erode',
@@ -515,6 +545,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         setToastMessage,
         selectedDistrict,
         setSelectedDistrict,
+        theme,
+        setTheme,
+        toggleTheme,
 
         // Offline Caching & Sync Context exports
         isOffline,

@@ -3,6 +3,7 @@ import { useAppContext } from '../context/AppContext';
 import { UserRole } from '../types';
 import { MedicalDisclaimer } from './common/MedicalDisclaimer';
 import { SUPPORTED_DISTRICTS } from '../data/hospitalsData';
+import { hashPassword, verifyPassword } from '../utils/passwordHash';
 import {
   HeartPulse,
   User,
@@ -52,6 +53,7 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
   const [signinEmailOrPhone, setSigninEmailOrPhone] = useState('');
   const [signinPassword, setSigninPassword] = useState('');
   const [signinError, setSigninError] = useState<string | null>(null);
+  const [signinSubmitting, setSigninSubmitting] = useState(false);
 
   // Forgot Password state & workflow
   const [showForgotPassword, setShowForgotPassword] = useState(false);
@@ -110,6 +112,9 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
   const [gender, setGender] = useState<string>('Female');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
+  const [regPassword, setRegPassword] = useState('');
+  const [regConfirmPassword, setRegConfirmPassword] = useState('');
+  const [registerSubmitting, setRegisterSubmitting] = useState(false);
   const [location, setLocation] = useState('Erode, Tamil Nadu');
   const [district, setDistrict] = useState(selectedDistrict || 'Erode');
 
@@ -177,40 +182,58 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
   };
 
   // Sign In submit handler
-  const handleSignInSubmit = (e: React.FormEvent) => {
+  // NOTE: Only patient accounts created via the registration form below have
+  // a password set (see handleRegisterSubmit). Seed/demo patients, and all
+  // doctors/caregivers, have no credentials — they're only reachable through
+  // the explicit "Instant Demo Profile" buttons, never through this form.
+  const handleSignInSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSigninError(null);
 
-    if (!signinEmailOrPhone.trim()) {
+    const query = signinEmailOrPhone.trim();
+    if (!query) {
       setSigninError('Please enter your email or phone number');
       return;
     }
+    if (!signinPassword) {
+      setSigninError('Please enter your password');
+      return;
+    }
 
-    if (selectedRole === 'patient') {
-      const found = patients.find(
-        p =>
-          p.email.toLowerCase() === signinEmailOrPhone.toLowerCase().trim() ||
-          p.phone === signinEmailOrPhone.trim() ||
-          p.name.toLowerCase().includes(signinEmailOrPhone.toLowerCase().trim())
-      );
-      if (found) {
+    setSigninSubmitting(true);
+    try {
+      if (selectedRole === 'patient') {
+        // Exact match only — a substring match on `name` could match the
+        // wrong patient (or several), which is not safe for login.
+        const found = patients.find(
+          p =>
+            p.email.toLowerCase() === query.toLowerCase() ||
+            p.phone === query
+        );
+        const passwordOk = found ? await verifyPassword(signinPassword, found.passwordHash) : false;
+
+        if (!found || !passwordOk) {
+          setSigninError('Incorrect email/phone or password.');
+          return; // do NOT fall back to logging in as some other patient
+        }
         handleQuickLogin('patient', found.id);
+      } else if (selectedRole === 'doctor') {
+        const found = doctors.find(d => d.name.toLowerCase() === query.toLowerCase());
+        if (!found) {
+          setSigninError('No doctor account found with that name. Use an Instant Demo Profile below.');
+          return;
+        }
+        handleQuickLogin('doctor', found.id);
       } else {
-        // Fallback login with first patient
-        handleQuickLogin('patient', patients[0]?.id);
+        const found = caregivers.find(c => c.name.toLowerCase() === query.toLowerCase());
+        if (!found) {
+          setSigninError('No caregiver account found with that name. Use an Instant Demo Profile below.');
+          return;
+        }
+        handleQuickLogin('caregiver', found.id);
       }
-    } else if (selectedRole === 'doctor') {
-      const found = doctors.find(
-        d =>
-          d.name.toLowerCase().includes(signinEmailOrPhone.toLowerCase().trim())
-      );
-      handleQuickLogin('doctor', found ? found.id : doctors[0]?.id);
-    } else {
-      const found = caregivers.find(
-        c =>
-          c.name.toLowerCase().includes(signinEmailOrPhone.toLowerCase().trim())
-      );
-      handleQuickLogin('caregiver', found ? found.id : caregivers[0]?.id);
+    } finally {
+      setSigninSubmitting(false);
     }
   };
 
@@ -257,7 +280,7 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
   };
 
   // Form Registration Submit Handler
-  const handleRegisterSubmit = (e: React.FormEvent) => {
+  const handleRegisterSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const errors: { [key: string]: string } = {};
 
@@ -266,6 +289,11 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
     if (!gender) errors.gender = 'Gender selection is required';
     if (!email.trim() || !email.includes('@')) errors.email = 'Valid Email Address is required';
     if (!phone.trim()) errors.phone = 'Phone Number is required';
+    if (!regPassword || regPassword.length < 6) errors.password = 'Password must be at least 6 characters';
+    if (regPassword !== regConfirmPassword) errors.confirmPassword = 'Passwords do not match';
+    if (patients.some(p => p.email.toLowerCase() === email.trim().toLowerCase())) {
+      errors.email = 'An account with this email already exists';
+    }
     if (!location.trim()) errors.location = 'Location (City, State) is required';
     if (consentDataStorage === 'No') {
       errors.consent = 'Data storage agreement is required to provide personalized healthcare';
@@ -279,6 +307,14 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
 
     // Clear errors
     setRegErrors({});
+
+    setRegisterSubmitting(true);
+    let passwordHash = '';
+    try {
+      passwordHash = await hashPassword(regPassword);
+    } finally {
+      setRegisterSubmitting(false);
+    }
 
     // Process conditions list
     const finalConditions = selectedConditions.includes('No')
@@ -302,6 +338,7 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
       gender,
       email: email.trim(),
       phone: phone.trim(),
+      passwordHash,
       location: location.trim(),
       district,
       bloodGroup,
@@ -329,6 +366,8 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
     setGender('Female');
     setEmail('priya.a@example.com');
     setPhone('9876543210');
+    setRegPassword('Sample123');
+    setRegConfirmPassword('Sample123');
     setLocation('Erode, Tamil Nadu');
     setDistrict('Erode');
     setBloodGroup('B+');
@@ -539,9 +578,10 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
 
                 <button
                   type="submit"
-                  className="w-full bg-teal-600 hover:bg-teal-700 text-white font-bold py-3 rounded-xl transition-all text-xs uppercase tracking-wider shadow-md shadow-teal-600/20 flex items-center justify-center space-x-2"
+                  disabled={signinSubmitting}
+                  className="w-full bg-teal-600 hover:bg-teal-700 disabled:opacity-50 text-white font-bold py-3 rounded-xl transition-all text-xs uppercase tracking-wider shadow-md shadow-teal-600/20 flex items-center justify-center space-x-2"
                 >
-                  <span>Enter {selectedRole.toUpperCase()} Portal</span>
+                  <span>{signinSubmitting ? 'Checking…' : `Enter ${selectedRole.toUpperCase()} Portal`}</span>
                   <ArrowRight className="w-4 h-4" />
                 </button>
               </form>
@@ -754,6 +794,44 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
                     />
                     {regErrors.phone && (
                       <p className="text-[10px] text-rose-600 font-bold mt-1">{regErrors.phone}</p>
+                    )}
+                  </div>
+
+                  {/* Create Password */}
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      Create Password <span className="text-rose-500">*</span>
+                    </label>
+                    <input
+                      type="password"
+                      value={regPassword}
+                      onChange={e => setRegPassword(e.target.value)}
+                      placeholder="At least 6 characters"
+                      className={`w-full px-3.5 py-2.5 text-xs bg-white border ${
+                        regErrors.password ? 'border-rose-400 bg-rose-50/30' : 'border-slate-200'
+                      } rounded-xl focus:outline-none focus:border-teal-600 transition-colors font-medium`}
+                    />
+                    {regErrors.password && (
+                      <p className="text-[10px] text-rose-600 font-bold mt-1">{regErrors.password}</p>
+                    )}
+                  </div>
+
+                  {/* Confirm Password */}
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      Confirm Password <span className="text-rose-500">*</span>
+                    </label>
+                    <input
+                      type="password"
+                      value={regConfirmPassword}
+                      onChange={e => setRegConfirmPassword(e.target.value)}
+                      placeholder="Re-enter password"
+                      className={`w-full px-3.5 py-2.5 text-xs bg-white border ${
+                        regErrors.confirmPassword ? 'border-rose-400 bg-rose-50/30' : 'border-slate-200'
+                      } rounded-xl focus:outline-none focus:border-teal-600 transition-colors font-medium`}
+                    />
+                    {regErrors.confirmPassword && (
+                      <p className="text-[10px] text-rose-600 font-bold mt-1">{regErrors.confirmPassword}</p>
                     )}
                   </div>
 
@@ -1011,10 +1089,11 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
               <div className="pt-2">
                 <button
                   type="submit"
-                  className="w-full bg-teal-600 hover:bg-teal-700 text-white font-extrabold py-4 rounded-2xl transition-all text-xs uppercase tracking-wider shadow-lg shadow-teal-600/25 flex items-center justify-center space-x-2"
+                  disabled={registerSubmitting}
+                  className="w-full bg-teal-600 hover:bg-teal-700 disabled:opacity-50 text-white font-extrabold py-4 rounded-2xl transition-all text-xs uppercase tracking-wider shadow-lg shadow-teal-600/25 flex items-center justify-center space-x-2"
                 >
                   <CheckCircle2 className="w-4 h-4" />
-                  <span>Save Health Intake Profile & Enter App</span>
+                  <span>{registerSubmitting ? 'Saving Profile...' : 'Save Health Intake Profile & Enter App'}</span>
                 </button>
               </div>
             </form>

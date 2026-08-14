@@ -506,21 +506,35 @@ Based on your symptoms, consulting a **${specialty}** specialist is recommended 
       return;
     }
 
-    const lowerText = text.toLowerCase();
-    const isExplicitDoctorBookingRequest =
-      (lowerText.includes('book') && (lowerText.includes('appointment') || lowerText.includes('doctor') || lowerText.includes('slot'))) ||
-      (lowerText.includes('find') && (lowerText.includes('doctor') || lowerText.includes('specialist') || lowerText.includes('hospital')));
+    const lowerText = text.toLowerCase().trim();
+    const simpleGreetingRegex = /^(hi|hello|hey|good\s+morning|good\s+afternoon|good\s+evening|greetings|hi\s+there|hello\s+there|hiya|namaste|vanakkam)[\s!.]*$/i;
+    const isGreeting = simpleGreetingRegex.test(lowerText);
 
-    if (isExplicitDoctorBookingRequest) {
+    const isExplicitDoctorBookingRequest =
+      !isGreeting &&
+      ((lowerText.includes('book') && (lowerText.includes('appointment') || lowerText.includes('doctor') || lowerText.includes('slot'))) ||
+      (lowerText.includes('find') && (lowerText.includes('doctor') || lowerText.includes('specialist') || lowerText.includes('hospital'))));
+
+    const lastBotMsg = messages.slice().reverse().find(m => m.sender === 'assistant');
+    const lastBotText = lastBotMsg?.text?.toLowerCase() || '';
+    const lastBotAskedToBook =
+      lastBotText.includes('would you like me to show') ||
+      lastBotText.includes('book an appointment') ||
+      lastBotText.includes('available specialists') ||
+      lastBotText.includes('consult a doctor') ||
+      lastBotText.includes('consult');
+
+    const agreementWords = ['yes', 'sure', 'show doctors', 'yes please', 'ok', 'please show doctors', 'book', 'book appointment', 'yup', 'yeah', 'please', 'show me', 'confirm'];
+    const isAgreementToBook = !isGreeting && lastBotAskedToBook && agreementWords.some(w => lowerText === w || lowerText.startsWith(w));
+
+    if (isExplicitDoctorBookingRequest || isAgreementToBook) {
       const { specialty, severity, doctors: matchedDocs } = getDoctorMatchForSymptoms(text);
 
       setTimeout(() => {
         const botMsg: ChatMessage = {
           id: `msg_bot_${Date.now()}`,
           sender: 'assistant',
-          text: `I can help you find specialists in Erode!
-
-Based on your request, here are top **${specialty}** specialists and available appointment slots:`,
+          text: `Here are recommended **${specialty}** specialists in Erode and available appointment slots:`,
           timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
           bookingData: {
             step: 'doctor_list',
@@ -554,7 +568,7 @@ Based on your request, here are top **${specialty}** specialists and available a
         body: JSON.stringify({
           prompt: text,
           patientContext,
-          history: newMessages.slice(-10).map(m => ({ role: m.sender === 'user' ? 'user' : 'assistant', text: m.text }))
+          history: isGreeting ? [] : newMessages.slice(-10).map(m => ({ role: m.sender === 'user' ? 'user' : 'assistant', text: m.text }))
         })
       });
 
@@ -571,20 +585,7 @@ Based on your request, here are top **${specialty}** specialists and available a
         throw new Error('Server returned connection error response');
       }
 
-      const lowerResp = responseText.toLowerCase();
-      const userMsgCount = newMessages.filter(m => m.sender === 'user').length;
-
-      const isTurn3OrDoctorRequested =
-        isExplicitDoctorBookingRequest ||
-        (userMsgCount >= 3 && (
-          lowerResp.includes('routine') ||
-          lowerResp.includes('urgent') ||
-          lowerResp.includes('book an appointment') ||
-          lowerResp.includes('appointment feature') ||
-          lowerResp.includes('specialist to consult') ||
-          lowerResp.includes('general physician') ||
-          lowerResp.includes('recommended doctor')
-        ));
+      const isBookingRequired = !isGreeting && (isExplicitDoctorBookingRequest || isAgreementToBook);
 
       const botMsg: ChatMessage = {
         id: `msg_bot_${Date.now()}`,
@@ -593,7 +594,7 @@ Based on your request, here are top **${specialty}** specialists and available a
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         source: data.source,
         disclaimer: data.disclaimer,
-        bookingData: isTurn3OrDoctorRequested
+        bookingData: isBookingRequired
           ? {
               step: 'doctor_list',
               specialty,
@@ -616,62 +617,34 @@ Based on your request, here are top **${specialty}** specialists and available a
       console.warn('Chat API error or network unavailable, using CareFlow Clinical Engine fallback:', err);
       const { specialty, severity, doctors: matchedDocs } = getDoctorMatchForSymptoms(text);
       const userMsgCount = newMessages.filter(m => m.sender === 'user').length;
-      const lowerText = text.toLowerCase();
-
-      const isDoctorQuery =
-        isExplicitDoctorBookingRequest ||
-        lowerText.includes('doctor') ||
-        lowerText.includes('specialist') ||
-        lowerText.includes('timing') ||
-        lowerText.includes('cardiologist') ||
-        lowerText.includes('neurologist') ||
-        lowerText.includes('recommend') ||
-        lowerText.includes('suggest') ||
-        lowerText.includes('book') ||
-        lowerText.includes('appointment');
 
       let fallbackText = '';
-      const primaryMatch = matchedDocs[0];
-      const docName = primaryMatch ? primaryMatch.doctor.name : ERODE_DOCTORS[0].name;
-      const docHosp = primaryMatch ? primaryMatch.hospitalName : ERODE_DOCTORS[0].hospital;
-      const docHours = primaryMatch ? (primaryMatch.doctor.availability || '10:00 AM - 04:00 PM') : (ERODE_DOCTORS[0].availability || '10:00 AM - 04:00 PM');
-      const docQual = primaryMatch ? primaryMatch.doctor.qualification : ERODE_DOCTORS[0].qualification;
 
-      if (isDoctorQuery || matchedDocs.length > 0) {
-        fallbackText = `For ${specialty.toLowerCase()} concerns, I'd recommend **${docName}**, a specialist at **${docHosp}**. His consultation timings are **${docHours}**.
-
-Please note that this is not a diagnosis or prescription, and it's always best to consult a doctor in person for personalized advice. You can book an appointment through our app to see ${docName} or another ${specialty.toLowerCase()} specialist that suits your needs.`;
+      if (isGreeting) {
+        fallbackText = `Hello ${patient?.name || ''}! 👋 How can I help you with your health today? Please describe any symptoms you are experiencing, or ask a health question.`;
       } else if (userMsgCount === 1) {
         fallbackText = `I'm sorry to hear that you're not feeling well today. I'm here to listen and help you understand what might be going on.
 
 To help me better understand your situation, could you please answer a few quick questions?
 1. **Duration & Onset:** When did this symptom start, and did it come on suddenly or gradually?
-2. **Location & Character:** Where exactly is the discomfort, and how would you describe it?
-3. **Severity:** On a scale of 1 to 10, how severe is the discomfort right now?
-
-Once you share a few details, I'll be glad to summarize your symptoms and suggest safe self-care steps or matching specialist options.`;
+2. **Severity:** On a scale of 1 to 10, how severe is the discomfort right now?
+3. **Related Symptoms:** Are you experiencing any other symptoms like fever, nausea, or fatigue?`;
       } else if (userMsgCount === 2) {
         fallbackText = `Thank you for sharing those details with me.
 
-### 📋 Summary of What You Shared
-You have been experiencing symptoms as described in our conversation.
+### 📋 General Guidance & Self-Care
+• **Possible Explanation:** Symptoms like this are commonly associated with physical strain, temporary inflammation, or mild stress response.
+• **Safe Self-Care:** Rest comfortably, maintain good hydration (water or electrolytes), and avoid heavy exertion.
 
-### 🔍 Possible Explanations
-• **Common Viral / Functional Strain** (~70% likelihood): Often associated with temporary physical stress or mild infection.
-• **Secondary Metabolic / Environmental Factor** (~25% likelihood): Related to fluid balance, sleep, or physical exertion.
+### 🩺 Recommended Specialist
+This sounds like something a **${specialty}** or General Physician could evaluate.
 
-### 🌿 Safe Self-Care Measures
-• Rest comfortably in a well-ventilated, calm environment.
-• Sip plenty of fluids (water, warm herbal tea, ORS) throughout the day.
-• Keep a simple log of your symptoms and vitals.`;
+**Would you like me to show top specialists in Erode and help you book an appointment?**`;
       } else {
-        fallbackText = `Based on what you've described, this sounds like something a ${specialty.toLowerCase()} specialist could take a look at. Here are recommended specialists in Erode you can consult:
-- **${docName}** (${docQual}) - ${docHosp}
-
-You can select a slot below to book an appointment.`;
+        fallbackText = `Based on what you've described, consulting a **${specialty}** specialist is recommended. You can select a slot below to book an appointment with a top doctor in Erode.`;
       }
 
-      const isBookingRequired = isDoctorQuery || userMsgCount >= 3 || matchedDocs.length > 0;
+      const isBookingRequired = !isGreeting && (isExplicitDoctorBookingRequest || isAgreementToBook || userMsgCount >= 3);
 
       const botMsg: ChatMessage = {
         id: `msg_bot_fallback_${Date.now()}`,
