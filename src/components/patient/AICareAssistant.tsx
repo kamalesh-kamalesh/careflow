@@ -42,7 +42,8 @@ import {
   MicOff,
   AudioWaveform,
   Paperclip,
-  ArrowUp
+  ArrowUp,
+  ArrowRight
 } from 'lucide-react';
 
 interface AICareAssistantProps {
@@ -887,17 +888,136 @@ Patient: Jane Doe | Age: 45 | Date: 2026-06-10
           {/* Main Content Area */}
           <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6 flex flex-col">
             {messages.length <= 1 ? (
-              /* Centered Greeting & Pill Input Bar */
-              <div className="my-auto py-6 flex flex-col items-center justify-center text-center space-y-6 max-w-2xl mx-auto w-full">
-                <h2 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900">
-                  What's on the agenda today?
-                </h2>
-                <p className="text-xs sm:text-sm text-slate-500 max-w-md font-medium">
-                  Ask medical questions, check symptoms, book doctor appointments, or manage your health records.
-                </p>
+              /* CareFlow Hero Layout with Journey Tracker & Action Cards */
+              <div className="my-auto py-4 flex flex-col items-center justify-center text-center space-y-6 max-w-4xl mx-auto w-full">
+                {/* CareFlow Journey Tracker */}
+                <div className="w-full max-w-xl mx-auto mb-1">
+                  <div className="flex items-center justify-between relative">
+                    <div className="absolute left-0 top-1/2 w-full h-1 bg-slate-200 -z-10 rounded-full transform -translate-y-1/2"></div>
+                    <div className="absolute left-0 top-1/2 w-1/3 h-1 bg-teal-600 -z-10 rounded-full transform -translate-y-1/2"></div>
+                    
+                    <div className="flex flex-col items-center gap-1">
+                      <div className="w-7 h-7 rounded-full bg-teal-600 text-white flex items-center justify-center font-bold text-xs shadow-md ring-4 ring-white">
+                        1
+                      </div>
+                      <span className="text-[11px] font-bold text-teal-700">Symptoms</span>
+                    </div>
+                    
+                    <div className="flex flex-col items-center gap-1">
+                      <div className="w-7 h-7 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center font-bold text-xs border border-slate-300">
+                        2
+                      </div>
+                      <span className="text-[11px] font-medium text-slate-500">Review</span>
+                    </div>
+
+                    <div className="flex flex-col items-center gap-1">
+                      <div className="w-7 h-7 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center font-bold text-xs border border-slate-300">
+                        3
+                      </div>
+                      <span className="text-[11px] font-medium text-slate-500">Action</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Hero Avatar & Heading */}
+                <div className="text-center relative">
+                  <div className="w-20 h-20 sm:w-24 sm:h-24 mx-auto mb-3 relative flex items-center justify-center">
+                    <div className="absolute inset-0 bg-teal-400/20 rounded-full blur-xl"></div>
+                    <img
+                      src="https://lh3.googleusercontent.com/aida/AP1WRLt0ZIXfZRnqFXWwzAANp8QqNBWxI0bwSaafBGUdhVubK4GwIE34vuncTup_9ai1uguOLGmdjkzgF0YHFIOHiUsA_zOHogY48Fvg2VhEOS-tq8Szb3vtr1FjX0OON5KluIxlvzpjKtLU_ptwyMngCfCAD-0G1aXDBXnyvphj-H3evTG6l7LwJeFSSd7Ri4WQzN0eiOHaibAhXv9Dm5TWEyBj78JlF5kOJrN4_jszthxBu4boLL66CKTIwgY0"
+                      alt="CareFlow AI Assistant"
+                      className="w-20 h-20 sm:w-24 sm:h-24 object-contain relative z-10 animate-bounce transition-transform duration-500 hover:scale-105 drop-shadow-md"
+                      onError={(e) => {
+                        (e.target as HTMLElement).style.display = 'none';
+                      }}
+                    />
+                  </div>
+                  <h2 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900 max-w-xl mx-auto leading-tight">
+                    Hi! 👋 I'm CareFlow AI.<br />How can I help you today?
+                  </h2>
+                </div>
+
+                {/* 4 Action Cards Grid */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 sm:gap-4 w-full max-w-3xl text-left">
+                  <button
+                    type="button"
+                    onClick={() => setShowSymptomModal(true)}
+                    className="bg-white hover:bg-teal-50/60 border border-slate-200 rounded-2xl p-4 sm:p-5 flex flex-col justify-between transition-all duration-300 hover:-translate-y-0.5 hover:shadow-md group cursor-pointer"
+                  >
+                    <div className="flex items-center justify-between mb-3">
+                      <span className="text-2xl sm:text-3xl">🤒</span>
+                      <ArrowRight className="w-4 h-4 text-slate-400 group-hover:text-teal-600 transition-colors" />
+                    </div>
+                    <div>
+                      <h3 className="text-base sm:text-lg font-bold text-slate-900 group-hover:text-teal-700 transition-colors">
+                        I'm feeling unwell
+                      </h3>
+                      <p className="text-xs text-slate-500 mt-0.5 font-medium">
+                        Start a symptom check
+                      </p>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleSendMessage("I have a question about my medications and potential side effects")}
+                    className="bg-white hover:bg-teal-50/60 border border-slate-200 rounded-2xl p-4 sm:p-5 flex flex-col justify-between transition-all duration-300 hover:-translate-y-0.5 hover:shadow-md group cursor-pointer"
+                  >
+                    <div className="flex items-center justify-between mb-3">
+                      <span className="text-2xl sm:text-3xl">💊</span>
+                      <ArrowRight className="w-4 h-4 text-slate-400 group-hover:text-teal-600 transition-colors" />
+                    </div>
+                    <div>
+                      <h3 className="text-base sm:text-lg font-bold text-slate-900 group-hover:text-teal-700 transition-colors">
+                        I have a medicine question
+                      </h3>
+                      <p className="text-xs text-slate-500 mt-0.5 font-medium">
+                        Information &amp; interactions
+                      </p>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleSendMessage(`I want to book an appointment with a specialist in ${selectedDistrict || 'Erode'}`)}
+                    className="bg-white hover:bg-teal-50/60 border border-slate-200 rounded-2xl p-4 sm:p-5 flex flex-col justify-between transition-all duration-300 hover:-translate-y-0.5 hover:shadow-md group cursor-pointer"
+                  >
+                    <div className="flex items-center justify-between mb-3">
+                      <span className="text-2xl sm:text-3xl">📅</span>
+                      <ArrowRight className="w-4 h-4 text-slate-400 group-hover:text-teal-600 transition-colors" />
+                    </div>
+                    <div>
+                      <h3 className="text-base sm:text-lg font-bold text-slate-900 group-hover:text-teal-700 transition-colors">
+                        I want to book a doctor
+                      </h3>
+                      <p className="text-xs text-slate-500 mt-0.5 font-medium">
+                        Schedule an appointment
+                      </p>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleSendMessage("I want to check my health vitals and recent medical metrics summary")}
+                    className="bg-white hover:bg-teal-50/60 border border-slate-200 rounded-2xl p-4 sm:p-5 flex flex-col justify-between transition-all duration-300 hover:-translate-y-0.5 hover:shadow-md group cursor-pointer"
+                  >
+                    <div className="flex items-center justify-between mb-3">
+                      <span className="text-2xl sm:text-3xl">❤️</span>
+                      <ArrowRight className="w-4 h-4 text-slate-400 group-hover:text-teal-600 transition-colors" />
+                    </div>
+                    <div>
+                      <h3 className="text-base sm:text-lg font-bold text-slate-900 group-hover:text-teal-700 transition-colors">
+                        I want to check my health
+                      </h3>
+                      <p className="text-xs text-slate-500 mt-0.5 font-medium">
+                        Vitals &amp; recent metrics
+                      </p>
+                    </div>
+                  </button>
+                </div>
 
                 {/* Centered Pill Search / Chat Bar */}
-                <div className="w-full relative">
+                <div className="w-full max-w-2xl relative">
                   <form
                     onSubmit={e => {
                       e.preventDefault();
@@ -905,7 +1025,6 @@ Patient: Jane Doe | Age: 45 | Date: 2026-06-10
                     }}
                     className="bg-slate-100 hover:bg-slate-200/70 transition-all border border-slate-300 focus-within:border-teal-600 focus-within:bg-white focus-within:ring-2 focus-within:ring-teal-500/20 rounded-full px-3 sm:px-4 py-2 flex items-center gap-2 shadow-sm"
                   >
-                    {/* Attachment + Button */}
                     <button
                       type="button"
                       onClick={() => setShowAttachMenu(!showAttachMenu)}
@@ -915,7 +1034,6 @@ Patient: Jane Doe | Age: 45 | Date: 2026-06-10
                       <Plus className="w-5 h-5 text-slate-700" />
                     </button>
 
-                    {/* Popover Attachment Menu */}
                     {showAttachMenu && (
                       <div className="absolute left-0 bottom-16 z-50 bg-white border border-slate-200 rounded-2xl p-2 shadow-xl w-64 text-left space-y-1">
                         <button
@@ -956,7 +1074,6 @@ Patient: Jane Doe | Age: 45 | Date: 2026-06-10
                       </div>
                     )}
 
-                    {/* Input Field */}
                     <input
                       type="text"
                       value={inputPrompt}
@@ -965,7 +1082,6 @@ Patient: Jane Doe | Age: 45 | Date: 2026-06-10
                       className="flex-1 bg-transparent border-0 text-slate-900 placeholder-slate-500 text-sm sm:text-base focus:outline-none focus:ring-0 px-2 font-medium"
                     />
 
-                    {/* Mic Button */}
                     <button
                       type="button"
                       onClick={toggleListening}
@@ -979,7 +1095,6 @@ Patient: Jane Doe | Age: 45 | Date: 2026-06-10
                       {isListening ? <MicOff className="w-5 h-5 text-red-600" /> : <Mic className="w-5 h-5" />}
                     </button>
 
-                    {/* Send Button */}
                     <button
                       type="submit"
                       disabled={loadingChat || (!inputPrompt.trim() && !isListening)}
